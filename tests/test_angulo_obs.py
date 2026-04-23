@@ -86,7 +86,6 @@ class TestAnguloEntreObservadores:
         eps_min, eps_max = self.test_epsilon_intervalo()
         eps_medio = (eps_min + eps_max) / 2
 
-        # Para ángulos pequeños, arcsin(ε) ≈ ε radianes
         theta_min_rad = math.asin(eps_min)
         theta_max_rad = math.asin(eps_max)
         theta_medio_rad = math.asin(eps_medio)
@@ -99,7 +98,6 @@ class TestAnguloEntreObservadores:
         print(f"  ε_max = {eps_max:.6f} → θ_max = {theta_max_deg:.4f}° = {theta_max_deg*3600:.2f}″")
         print(f"  ε_medio = {eps_medio:.6f} → θ_medio = {theta_medio_deg:.4f}° = {theta_medio_deg*3600:.2f}″")
 
-        # Diferencia angular (amplitud de oscilación)
         delta_theta_deg = theta_max_deg - theta_min_deg
         delta_theta_arcsec = delta_theta_deg * 3600
 
@@ -117,22 +115,17 @@ class TestAnguloEntreObservadores:
         eps_min, eps_max = self.test_epsilon_intervalo()
         delta_theta_arcsec = (math.asin(eps_max) - math.asin(eps_min)) * 180 / math.pi * 3600
 
-        # Constantes astronómicas conocidas
-        NUTACION_MAX = 17.0  # segundos de arco (amplitud máxima de nutación)
-        NUTACION_MIN = 9.0   # segundos de arco (componente principal)
-        PRECESION_ANUAL = 50.3  # segundos de arco por año
+        NUTACION_MAX = 17.0
+        NUTACION_MIN = 9.0
+        PRECESION_ANUAL = 50.3
 
         print(f"\n  🌍 Ángulo calculado entre observadores: {delta_theta_arcsec:.2f}″")
         print(f"\n  📡 Constantes astronómicas conocidas:")
-        print(f"     Nutación máxima:      {NUTACION_MAX}″ (variación del eje terrestre)")
+        print(f"     Nutación máxima:      {NUTACION_MAX}″")
         print(f"     Nutación principal:   {NUTACION_MIN}″")
         print(f"     Precesión anual:      {PRECESION_ANUAL}″/año")
 
-        # Verificar que el ángulo está en el rango de la nutación
         esta_en_rango_nutacion = (NUTACION_MIN <= delta_theta_arcsec <= NUTACION_MAX + 10)
-        # +10 de holgura porque podemos estar viendo un armónico
-
-        # Verificar relación con precesión (¿cuántos días de precesión equivalen?)
         dias_precesion = delta_theta_arcsec / PRECESION_ANUAL * 365.25
 
         print(f"\n  ⏱️  El ángulo equivale a {dias_precesion:.2f} días de precesión terrestre")
@@ -143,8 +136,6 @@ class TestAnguloEntreObservadores:
         else:
             print(f"\n  ⚠️ El ángulo {delta_theta_arcsec:.2f}″ está fuera del rango de nutación ({NUTACION_MIN}-{NUTACION_MAX}″)")
 
-        # No hacemos assert aquí porque es correspondencia estructural,
-        # no derivación exacta. El marco observa la analogía, no la exige.
         return delta_theta_arcsec, dias_precesion
 
     def test_oscilacion_epsilon_clase(self):
@@ -157,15 +148,12 @@ class TestAnguloEntreObservadores:
         delta_eps = eps_max - eps_min
         eps_medio = (eps_min + eps_max) / 2
 
-        # Coeficiente de variación (amplitud relativa)
         cv = delta_eps / eps_medio
 
         print(f"\n  Δε = {delta_eps:.6f}")
         print(f"  ε_medio = {eps_medio:.6f}")
         print(f"  Coeficiente de variación = {cv:.4%}")
 
-        # Para un sistema subamortiguado (vivo), la variación debe ser > 0
-        # y menor que el propio ε (no puede oscilar más allá de sí mismo)
         es_vivo = (delta_eps > 0) and (cv < 1)
 
         if es_vivo:

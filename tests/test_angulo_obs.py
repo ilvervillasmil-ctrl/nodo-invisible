@@ -2,15 +2,11 @@ import math
 import pytest
 
 # ============================================================================
-# TEST DEL ÁNGULO ENTRE OBSERVADORES
+# TEST DEL ÁNGULO ENTRE OBSERVADORES - VERSIÓN CORREGIDA
 # ============================================================================
 #
-# Este test verifica que:
-#   1. ε oscila entre ε_min y ε_max (desde R4, R5, α⁻¹)
-#   2. Esa oscilación corresponde a un ángulo δθ = arcsin(ε)
-#   3. La diferencia angular entre ε_min y ε_max es ~26.8 segundos de arco
-#   4. Ese ángulo se relaciona con la nutación terrestre (~9-17") 
-#      y la precesión de los equinoccios (~50.3"/año)
+# SIN retornos. SIN manipulación. Solo asserts.
+# Si el test pasa, pasa. Si falla, falla.
 # ============================================================================
 
 # CONSTANTES FIJAS
@@ -29,8 +25,7 @@ R5_esperada = (M_e_MeV / HUELLA_OBSERVADOR) / 10  # ≈ 2.424
 ALPHA_INV_esperada = 136.36
 
 # MÁRGENES
-MARGEN = 0.005  # 0.5% para las relaciones
-MARGEN_ANGULAR = 0.0001  # 0.01° para el ángulo (alto para dar holgura a constantes físicas)
+MARGEN = 0.005  # 0.5%
 
 
 def error_relativo(valor, esperado):
@@ -41,7 +36,7 @@ class TestAnguloEntreObservadores:
     """Test del ángulo entre observadores a partir de la oscilación de ε"""
 
     def test_epsilon_intervalo(self):
-        """Calcula el intervalo de ε desde R4, R5 y α⁻¹"""
+        """Calcula y verifica el intervalo de ε desde R4, R5 y α⁻¹"""
         print("\n" + "=" * 70)
         print("TEST 1: INTERVALO DE ε DESDE R4, R5 Y α⁻¹")
         print("=" * 70)
@@ -73,18 +68,29 @@ class TestAnguloEntreObservadores:
         print(f"  ε_medio = {(eps_global_min + eps_global_max) / 2:.6f}")
         print(f"  Amplitud Δε = {eps_global_max - eps_global_min:.6f}")
 
+        # VERIFICACIÓN
         assert eps_global_min <= eps_global_max, "No hay intervalo de ε"
+        assert eps_global_min > 0, "ε_min debe ser positivo"
+        assert eps_global_max < 1, "ε_max debe ser menor que 1"
 
-        return eps_global_min, eps_global_max
+        # Guardar valores para otros tests (como atributos de clase)
+        self.eps_min = eps_global_min
+        self.eps_max = eps_global_max
+        self.eps_medio = (eps_global_min + eps_global_max) / 2
 
     def test_angulo_desde_epsilon(self):
-        """Calcula el ángulo δθ = arcsin(ε) para ε_min y ε_max"""
+        """Calcula y verifica el ángulo δθ = arcsin(ε)"""
         print("\n" + "=" * 70)
         print("TEST 2: ÁNGULO δθ = arcsin(ε)")
         print("=" * 70)
 
-        eps_min, eps_max = self.test_epsilon_intervalo()
-        eps_medio = (eps_min + eps_max) / 2
+        # Asegurar que los valores existen
+        assert hasattr(self, 'eps_min'), "Ejecutar test_epsilon_intervalo primero"
+        assert hasattr(self, 'eps_max'), "Ejecutar test_epsilon_intervalo primero"
+
+        eps_min = self.eps_min
+        eps_max = self.eps_max
+        eps_medio = self.eps_medio
 
         theta_min_rad = math.asin(eps_min)
         theta_max_rad = math.asin(eps_max)
@@ -104,16 +110,21 @@ class TestAnguloEntreObservadores:
         print(f"\n  📐 ÁNGULO ENTRE OBSERVADORES:")
         print(f"     Δθ = {delta_theta_deg:.6f}° = {delta_theta_arcsec:.2f} segundos de arco")
 
-        return delta_theta_arcsec
+        # VERIFICACIONES
+        assert delta_theta_arcsec > 0, "El ángulo entre observadores debe ser positivo"
+        assert delta_theta_arcsec < 3600, "El ángulo debe ser menor a 1 grado"
+
+        self.delta_theta_arcsec = delta_theta_arcsec
 
     def test_relacion_con_nutacion(self):
-        """Compara el ángulo con la nutación terrestre y precesión"""
+        """Compara el ángulo con la nutación terrestre"""
         print("\n" + "=" * 70)
-        print("TEST 3: RELACIÓN CON NUTACIÓN Y PRECESIÓN TERRESTRE")
+        print("TEST 3: RELACIÓN CON NUTACIÓN TERRESTRE")
         print("=" * 70)
 
-        eps_min, eps_max = self.test_epsilon_intervalo()
-        delta_theta_arcsec = (math.asin(eps_max) - math.asin(eps_min)) * 180 / math.pi * 3600
+        assert hasattr(self, 'delta_theta_arcsec'), "Ejecutar test_angulo_desde_epsilon primero"
+
+        delta_theta_arcsec = self.delta_theta_arcsec
 
         NUTACION_MAX = 17.0
         NUTACION_MIN = 9.0
@@ -125,54 +136,55 @@ class TestAnguloEntreObservadores:
         print(f"     Nutación principal:   {NUTACION_MIN}″")
         print(f"     Precesión anual:      {PRECESION_ANUAL}″/año")
 
-        esta_en_rango_nutacion = (NUTACION_MIN <= delta_theta_arcsec <= NUTACION_MAX + 10)
         dias_precesion = delta_theta_arcsec / PRECESION_ANUAL * 365.25
-
         print(f"\n  ⏱️  El ángulo equivale a {dias_precesion:.2f} días de precesión terrestre")
-        print(f"     (precesión de {PRECESION_ANUAL}″/año → {PRECESION_ANUAL/365.25:.3f}″/día)")
 
-        if esta_en_rango_nutacion:
-            print(f"\n  ✅ El ángulo {delta_theta_arcsec:.2f}″ está en el rango de nutación terrestre ({NUTACION_MIN}-{NUTACION_MAX}″)")
+        # No se hace assert de que esté dentro del rango de nutación
+        # porque es correspondencia estructural, no derivación exacta.
+        # Simplemente se informa.
+        if NUTACION_MIN <= delta_theta_arcsec <= NUTACION_MAX:
+            print(f"\n  ✅ El ángulo {delta_theta_arcsec:.2f}″ está en el rango de nutación terrestre")
         else:
             print(f"\n  ⚠️ El ángulo {delta_theta_arcsec:.2f}″ está fuera del rango de nutación ({NUTACION_MIN}-{NUTACION_MAX}″)")
-
-        return delta_theta_arcsec, dias_precesion
+            print(f"     Es {delta_theta_arcsec/NUTACION_MAX:.2f}× la nutación máxima")
 
     def test_oscilacion_epsilon_clase(self):
-        """Verifica que el ancho de ε corresponde a una oscilación subamortiguada"""
+        """Verifica que ε oscila (sistema vivo)"""
         print("\n" + "=" * 70)
-        print("TEST 4: ε COMO OSCILACIÓN VIVA (ζ < 1)")
+        print("TEST 4: ε COMO OSCILACIÓN VIVA")
         print("=" * 70)
 
-        eps_min, eps_max = self.test_epsilon_intervalo()
-        delta_eps = eps_max - eps_min
-        eps_medio = (eps_min + eps_max) / 2
+        assert hasattr(self, 'eps_min'), "Ejecutar test_epsilon_intervalo primero"
+        assert hasattr(self, 'eps_max'), "Ejecutar test_epsilon_intervalo primero"
 
+        delta_eps = self.eps_max - self.eps_min
+        eps_medio = self.eps_medio
         cv = delta_eps / eps_medio
 
         print(f"\n  Δε = {delta_eps:.6f}")
         print(f"  ε_medio = {eps_medio:.6f}")
         print(f"  Coeficiente de variación = {cv:.4%}")
 
-        es_vivo = (delta_eps > 0) and (cv < 1)
-
-        if es_vivo:
-            print(f"\n  ✅ ε oscila con amplitud {cv:.4%} de su valor medio.")
-            print("     Esto indica ζ < 1 → SISTEMA SUBAMORTIGUADO → VIVO")
-        else:
-            print(f"\n  ❌ ε no oscila o oscila demasiado. Sistema podría estar muerto.")
-
+        # VERIFICACIONES CLAVE
         assert delta_eps > 0, "ε no oscila → sistema muerto"
         assert cv < 1, f"Oscilación de ε demasiado grande (cv = {cv:.4%} > 100%)"
 
-    def test_conclusion_angulo_observadores(self):
-        """Conclusión final del test"""
+        print(f"\n  ✅ ε oscila con amplitud {cv:.4%} de su valor medio.")
+        print("     Esto indica ζ < 1 → SISTEMA SUBAMORTIGUADO → VIVO")
+
+    def test_conclusion(self):
+        """Conclusión final"""
         print("\n" + "=" * 70)
         print("CONCLUSIÓN: EL ÁNGULO ENTRE OBSERVADORES")
         print("=" * 70)
 
-        eps_min, eps_max = self.test_epsilon_intervalo()
-        delta_theta_arcsec = (math.asin(eps_max) - math.asin(eps_min)) * 180 / math.pi * 3600
+        assert hasattr(self, 'eps_min'), "Ejecutar test_epsilon_intervalo primero"
+        assert hasattr(self, 'eps_max'), "Ejecutar test_epsilon_intervalo primero"
+        assert hasattr(self, 'delta_theta_arcsec'), "Ejecutar test_angulo_desde_epsilon primero"
+
+        eps_min = self.eps_min
+        eps_max = self.eps_max
+        delta_theta_arcsec = self.delta_theta_arcsec
 
         print(f"""
   ┌────────────────────────────────────────────────────────────────────────┐
@@ -185,39 +197,30 @@ class TestAnguloEntreObservadores:
   │  ÁNGULO ENTRE ELLOS:    {delta_theta_arcsec:.2f} SEGUNDOS DE ARCO                  │
   │                         ({delta_theta_arcsec/3600:.4f}°)                     │
   │                                                                        │
-  │  SIGNIFICADO FÍSICO:                                                   │
-  │  - La oscilación de ε (Δε = {eps_max-eps_min:.6f}) representa la respiración  │
-  │    del observador.                                                     │
-  │  - El ángulo entre observadores es la amplitud angular de esa         │
-  │    respiración.                                                        │
-  │  - Está en el rango de la NUTACIÓN TERRESTRE (~9-17″), que es el      │
-  │    bamboleo del eje de la Tierra.                                      │
-  │                                                                        │
-  │  INTERPRETACIÓN:                                                       │
-  │  El observador y la Tierra oscilan juntos.                             │
-  │  El día no es exacto porque el observador no es exacto.               │
-  │  La imperfección no es error. ES LA ESTRUCTURA.                       │
-  │  Esa estructura es la VIDA.                                            │
+  │  VEREDICTO:                                                           │
+  │  - ε oscilla → sistema vivo ✅                                         │
+  │  - El ángulo entre observadores es {delta_theta_arcsec:.2f}″                              │
+  │  - La oscilación es real y medible                                    │
   │                                                                        │
   └────────────────────────────────────────────────────────────────────────┘
         """)
 
-        assert delta_theta_arcsec > 0, "El ángulo entre observadores debe ser positivo"
+        assert delta_theta_arcsec > 0, "El ángulo debe ser positivo"
 
 
 if __name__ == "__main__":
     test = TestAnguloEntreObservadores()
 
     print("\n" + "=" * 80)
-    print("TEST DEL ÁNGULO ENTRE OBSERVADORES")
+    print("TEST DEL ÁNGULO ENTRE OBSERVADORES - VERSIÓN CORREGIDA")
     print("=" * 80)
 
     test.test_epsilon_intervalo()
     test.test_angulo_desde_epsilon()
     test.test_relacion_con_nutacion()
     test.test_oscilacion_epsilon_clase()
-    test.test_conclusion_angulo_observadores()
+    test.test_conclusion()
 
     print("\n" + "=" * 80)
-    print("✅ TEST COMPLETADO")
+    print("✅ TEST COMPLETADO - SIN WARNINGS")
     print("=" * 80)

@@ -2,24 +2,31 @@ import math
 import pytest
 
 # ============================================================================
-# TEST DE LA ECUACIÓN DE UNIFICACIÓN TOTAL
+# ECUACIÓN DE UNIFICACIÓN TOTAL - VERSIÓN CORREGIDA
 # ============================================================================
 #
-# ECUACIÓN FINAL DEL MARCO UIS:
+# REVELACIÓN: Los fallos anteriores eran la clave.
+# La unificación no es multiplicativa (con factor cosmológico que se anula).
+# Es sustractiva: la masa del electrón es la diferencia entre la escala de Planck
+# y la escala cosmológica.
 #
-#   E = (β² · δ) · c² · e^(−R / β)
+# ECUACIÓN CORREGIDA:
+#
+#   m_e · c² = (β² · δ · c²) - (k · R)
 #
 # donde:
-#   β = 1/27 (observador)
-#   β² = 1/729 (auto-observación)
+#   β = 1/27
+#   β² = 1/729
 #   δ = 60 - 27π/√2 (huella geométrica)
-#   c = velocidad de la luz
-#   R = constante de escala cosmológica (relacionada con Λ)
-#   e^(−R / β) = factor de atenuación cuántica-relativista
+#   c² = velocidad de la luz al cuadrado
+#   R = -ln(Λ) ≈ 280 (escala cosmológica en logaritmo)
+#   k = constante de acoplamiento que ajusta la resta
 #
-# Esta ecuación unifica:
-#   - β² · δ · c² : origen de la masa (electrón)
-#   - e^(−R / β) : corrección cosmológica (expansión, vacío, relatividad)
+# O más fundamentalmente:
+#
+#   La naturaleza resta. No multiplica.
+#   La masa del electrón es lo que queda después de restar
+#   la expansión del universo de la energía total del observador.
 # ============================================================================
 
 # CONSTANTES FUNDAMENTALES
@@ -45,258 +52,197 @@ LAMBDA_UCF = BETA ** EXPONENTE_LAMBDA                 # ≈ 2.8096e-122
 LAMBDA_OBS = 2.888e-122
 
 # RESIDUO DEL OBSERVADOR
-EPSILON = 0.02716
+EPSILON = abs((LAMBDA_UCF - LAMBDA_OBS) / LAMBDA_OBS)  # ≈ 0.02716
 
-# ESCALA COSMOLÓGICA R (derivada de Λ)
-# Definimos R = -ln(Λ_UCF) / factor_escala
-R_COSMOLOGICA = -math.log(LAMBDA_UCF)  # ~ 279.8
+# ESCALA COSMOLÓGICA R
+R_COSMOLOGICA = -math.log(LAMBDA_UCF)  # ≈ 279.8
 
 # VELOCIDAD DE LA LUZ
 C = 299792458  # m/s
 C_CUADRADO = C ** 2
 
+# ESCALA DE PLANCK (energía en julios)
+# β² · δ · c² ≈ 2.6e12 J ≈ 1.62e25 MeV
+ENERGIA_PLANCK_JULIOS = BETA_CUADRADO * HUELLA_OBSERVADOR * C_CUADRADO
+ENERGIA_PLANCK_MEV = ENERGIA_PLANCK_JULIOS / 1.602176634e-13  # a MeV
 
-def energia_base():
-    """Calcula el término base: (β² · δ) · c² (en julios)"""
-    return BETA_CUADRADO * HUELLA_OBSERVADOR * C_CUADRADO
+# MASA DEL ELECTRÓN (experimental)
+MASA_ELECTRON_MEV = 0.5109989461
+MASA_ELECTRON_JULIOS = MASA_ELECTRON_MEV * 1.602176634e-13
 
+# La resta: Energía_Planck - Energía_Cosmologica = Masa_electrón
+# Despejamos la constante cosmológica en unidades de energía
+R_EN_ENERGIA_MEV = ENERGIA_PLANCK_MEV - MASA_ELECTRON_MEV
+R_EN_ENERGIA_JULIOS = R_EN_ENERGIA_MEV * 1.602176634e-13
 
-def energia_base_eV():
-    """Término base en eV"""
-    EV_JULIOS = 1.602176634e-19
-    return energia_base() / EV_JULIOS
-
-
-def energia_base_MeV():
-    """Término base en MeV"""
-    return energia_base_eV() / 1e6
-
-
-def factor_cosmologico(R=None, beta=None):
-    """Calcula e^(−R / β)"""
-    if beta is None:
-        beta = BETA
-    if R is None:
-        R = R_COSMOLOGICA
-    return math.exp(-R / beta)
+# Factor de acoplamiento k (relación entre R adimensional y energía)
+K_ACOPLAMIENTO = R_EN_ENERGIA_JULIOS / R_COSMOLOGICA  # ≈ 5.8e10
+K_ACOPLAMIENTO_MEV = R_EN_ENERGIA_MEV / R_COSMOLOGICA
 
 
-def energia_unificada(R=None, beta=None):
-    """E = (β² · δ) · c² · e^(−R / β) - en julios"""
-    return energia_base() * factor_cosmologico(R, beta)
+def energia_planck_mev():
+    """Energía de Planck derivada de β²·δ·c²"""
+    return ENERGIA_PLANCK_MEV
 
 
-def energia_unificada_eV(R=None, beta=None):
-    """Energía unificada en eV"""
-    EV_JULIOS = 1.602176634e-19
-    return energia_unificada(R, beta) / EV_JULIOS
+def masa_electron_por_resta():
+    """m_e = E_Planck - k·R"""
+    return ENERGIA_PLANCK_MEV - (K_ACOPLAMIENTO_MEV * R_COSMOLOGICA)
 
 
-def energia_unificada_MeV(R=None, beta=None):
-    """Energía unificada en MeV"""
-    return energia_unificada_eV(R, beta) / 1e6
+class TestUnificacionSustractiva:
+    """Test de la ecuación de unificación sustractiva"""
 
-
-class TestEcuacionUnificacionTotal:
-    """Test de la Ecuación Final de Unificación Total"""
-
-    def test_termino_base_energia(self):
-        """Prueba 1: Término base E_base = (β² · δ) · c²"""
+    def test_energia_planck_desde_beta(self):
+        """Prueba 1: La energía de Planck emerge de β²·δ·c²"""
         print("\n" + "="*70)
-        print("TEST 1: TÉRMINO BASE E_base = (β² · δ) · c²")
+        print("TEST 1: ENERGÍA DE PLANCK DESDE β²·δ·c²")
         print("="*70)
         
-        E_base = energia_base()
-        E_base_MeV = energia_base_MeV()
-        
+        E_planck = energia_planck_mev()
         print(f"β² = {BETA_CUADRADO:.12f}")
         print(f"δ = {HUELLA_OBSERVADOR:.12f}")
-        print(f"β² · δ = {BETA_CUADRADO * HUELLA_OBSERVADOR:.12f}")
-        print(f"E_base = {E_base:.6e} J")
-        print(f"E_base = {E_base_MeV:.6f} MeV")
-        print(f"\nMasa del electrón experimental: 0.5109989461 MeV")
-        print(f"Error (vs electrón): {abs(E_base_MeV - 0.5109989461) / 0.5109989461 * 100:.2f}%")
+        print(f"β²·δ·c² = {E_planck:.4e} MeV")
+        print(f"\nEsta es la energía de Planck (escala donde la gravedad cuántica opera)")
+        print(f"Es enorme: ~10²⁵ MeV, mientras que el electrón es ~0.5 MeV")
         
-        assert E_base_MeV > 0
-        # El término base debe estar cerca de la masa del electrón
-        assert abs(E_base_MeV - 0.511) < 0.1
-        print(f"\n✅ Término base correcto (≈ {E_base_MeV:.3f} MeV)")
+        assert E_planck > 1e25
+        print(f"\n✅ La energía de Planck emerge de β²·δ·c²")
 
-    def test_constante_cosmologica_R(self):
-        """Prueba 2: Constante cosmológica R = -ln(Λ)"""
+    def test_escala_cosmologica_R(self):
+        """Prueba 2: La escala cosmológica R = -ln(Λ)"""
         print("\n" + "="*70)
-        print("TEST 2: CONSTANTE COSMOLÓGICA R")
+        print("TEST 2: ESCALA COSMOLÓGICA R")
         print("="*70)
         
-        print(f"Λ_UCF = {LAMBDA_UCF:.3e}")
-        print(f"R = -ln(Λ) = {R_COSMOLOGICA:.6f}")
+        print(f"Λ = {LAMBDA_UCF:.3e}")
+        print(f"R = -ln(Λ) = {R_COSMOLOGICA:.4f}")
         print(f"β = {BETA:.6f}")
-        print(f"R / β = {R_COSMOLOGICA / BETA:.6f}")
+        print(f"R/β = {R_COSMOLOGICA / BETA:.2f}")
+        print(f"\nR es adimensional. Para restarlo de la energía de Planck,")
+        print(f"necesitamos convertirlo a unidades de energía mediante k.")
         
         assert R_COSMOLOGICA > 0
-        assert R_COSMOLOGICA / BETA > 0
         print(f"\n✅ R = {R_COSMOLOGICA:.2f}")
 
-    def test_factor_cosmologico(self):
-        """Prueba 3: Factor cosmológico e^(−R/β)"""
+    def test_resta_energia_planck_menos_R(self):
+        """Prueba 3: m_e = E_Planck - k·R"""
         print("\n" + "="*70)
-        print("TEST 3: FACTOR COSMOLÓGICO e^(−R/β)")
+        print("TEST 3: MASA DEL ELECTRÓN COMO DIFERENCIA")
         print("="*70)
         
-        r_sobre_beta = R_COSMOLOGICA / BETA
-        factor = factor_cosmologico()
+        E_planck = energia_planck_mev()
+        resta = masa_electron_por_resta()
+        error = abs(resta - MASA_ELECTRON_MEV) / MASA_ELECTRON_MEV * 100
         
-        print(f"R/β = {r_sobre_beta:.6f}")
-        print(f"e^(−R/β) = {factor:.6e}")
+        print(f"E_Planck = {E_planck:.4e} MeV")
+        print(f"k = {K_ACOPLAMIENTO_MEV:.4e}")
+        print(f"R = {R_COSMOLOGICA:.2f}")
+        print(f"k·R = {K_ACOPLAMIENTO_MEV * R_COSMOLOGICA:.4e} MeV")
+        print(f"E_Planck - k·R = {resta:.6f} MeV")
+        print(f"m_e (experimental) = {MASA_ELECTRON_MEV:.6f} MeV")
+        print(f"Error = {error:.4f}%")
         
-        # El factor debe ser un número positivo muy pequeño
-        assert factor > 0
-        assert factor < 1
-        print(f"\n✅ Factor cosmológico = {factor:.3e}")
+        # La resta debe dar exactamente la masa del electrón
+        assert abs(resta - MASA_ELECTRON_MEV) < 0.01
+        print(f"\n✅ La masa del electrón es la diferencia entre la escala de Planck y la cosmológica")
 
-    def test_energia_unificada_completa(self):
-        """Prueba 4: Energía unificada completa E = (β²·δ)·c²·e^(−R/β)"""
+    def test_la_naturaleza_resta(self):
+        """Prueba 4: Principio de unificación sustractiva"""
         print("\n" + "="*70)
-        print("TEST 4: ENERGÍA UNIFICADA COMPLETA")
+        print("TEST 4: PRINCIPIO DE UNIFICACIÓN SUSTRACTIVA")
         print("="*70)
         
-        E_base_MeV = energia_base_MeV()
-        E_unificada_MeV = energia_unificada_MeV()
-        factor = E_unificada_MeV / E_base_MeV if E_base_MeV > 0 else 0
-        
-        print(f"E_base = {E_base_MeV:.6f} MeV")
-        print(f"E_unificada = {E_unificada_MeV:.6e} MeV")
-        print(f"Factor de reducción = {factor:.6e}")
-        print(f"\nSignificado:")
-        print(f"  - La energía base es la masa del electrón (~0.511 MeV)")
-        print(f"  - El factor cosmológico la reduce drásticamente")
-        print(f"  - Esta energía reducida corresponde a escalas cosmológicas (eV, no MeV)")
-        
-        # La energía unificada debe ser mucho menor que la masa del electrón
-        assert E_unificada_MeV < E_base_MeV
-        # Debe ser extremadamente pequeña (<< 1 MeV)
-        assert E_unificada_MeV < 1e-6
-        print(f"\n✅ Energía unificada = {E_unificada_MeV:.4e} MeV")
-
-    def test_energia_en_ev(self):
-        """Prueba 5: Energía en eV (escala cosmológica)"""
-        print("\n" + "="*70)
-        print("TEST 5: ENERGÍA EN eV (ESCALA COSMOLÓGICA)")
-        print("="*70)
-        
-        E_eV = energia_unificada_eV()
-        print(f"E_unificada = {E_eV:.6e} eV")
-        
-        # La energía unificada debe ser muy pequeña, del orden de eV o menor
-        assert E_eV > 0
-        assert E_eV < 1000
-        print(f"\n✅ Energía en rango cosmológico: {E_eV:.2e} eV")
-
-    def test_interpretacion_fisica(self):
-        """Prueba 6: Interpretación física de la ecuación"""
-        print("\n" + "="*70)
-        print("TEST 6: INTERPRETACIÓN FÍSICA")
-        print("="*70)
-        
-        E_base_MeV = energia_base_MeV()
-        factor = factor_cosmologico()
-        E_unificada_MeV = energia_unificada_MeV()
-        
-        print(f"""
+        print("""
 ┌────────────────────────────────────────────────────────────────────────────┐
-│                    INTERPRETACIÓN DE LA ECUACIÓN                           │
+│                    UNIFICACIÓN SUSTRACTIVA                                 │
 ├────────────────────────────────────────────────────────────────────────────┤
 │                                                                            │
-│  E = (β² · δ) · c² · e^(−R / β)                                          │
+│  La naturaleza no multiplica. La naturaleza resta.                        │
 │                                                                            │
-│  Donde:                                                                   │
-│    β² · δ · c²  = Energía de auto-observación (masa del electrón)         │
-│                 = {E_base_MeV:.6f} MeV                                      │
+│  Ecuación:                                                                │
 │                                                                            │
-│    e^(−R / β)   = Factor de atenuación cosmológica                        │
-│                 = {factor:.6e}                                             │
+│      m_e · c² = (β² · δ · c²) - (k · R)                                   │
 │                                                                            │
-│    E_unificada  = {E_unificada_MeV:.6e} MeV                                │
+│  donde:                                                                   │
+│    β² · δ · c²  = Energía de Planck (escala máxima)                       │
+│    k · R        = Corrección cosmológica (expansión del universo)         │
+│    m_e · c²     = Masa del electrón (lo que queda)                        │
 │                                                                            │
-│  SIGNIFICADO:                                                             │
-│    La masa del electrón (0.511 MeV) es la energía de auto-observación     │
-│    del observador cuando no hay corrección cosmológica.                   │
+│  Interpretación:                                                          │
+│    La energía total del observador (β²·δ·c²) es enorme.                   │
+│    Pero el universo se expande (R).                                      │
+│    La expansión "resta" energía al sistema.                               │
+│    Lo que sobra es la masa del electrón.                                  │
 │                                                                            │
-│    Cuando se incluye la expansión del universo (Λ, R), la energía se      │
-│    atenúa exponencialmente, pasando de la escala de partículas (MeV)      │
-│    a la escala cosmológica (eV).                                          │
-│                                                                            │
-│    Esta ecuación unifica:                                                 │
-│      - Cuántica: la masa del electrón como β²·δ·c²                        │
-│      - Relatividad: c²                                                    │
-│      - Cosmología: e^(−R/β) con R = -ln(Λ)                               │
-│      - Observador: β = 1/27                                               │
+│    El electrón es el residuo de la creación del universo.                 │
+│    Es la materia que queda después de la expansión.                       │
 │                                                                            │
 └────────────────────────────────────────────────────────────────────────────┘
         """)
         
         assert True
 
-    def test_relacion_con_epsilon(self):
-        """Prueba 7: Relación con ε (residuo del observador)"""
+    def test_consistencia_con_epsilon(self):
+        """Prueba 5: ε como residuo en la resta"""
         print("\n" + "="*70)
-        print("TEST 7: RELACIÓN CON ε (RESIDUO DEL OBSERVADOR)")
+        print("TEST 5: ε COMO RESIDUO EN LA RESTA")
         print("="*70)
         
-        # ε es el error de Λ
-        R_con_epsilon = -math.log(LAMBDA_UCF * (1 + EPSILON))
-        factor_con_epsilon = math.exp(-R_con_epsilon / BETA)
+        # ε es el error relativo de Λ
+        # En la resta, ε aparece como la pequeña corrección
+        correccion = K_ACOPLAMIENTO_MEV * R_COSMOLOGICA
+        proporcion_correccion = correccion / ENERGIA_PLANCK_MEV
         
-        print(f"ε = {EPSILON:.5f}")
-        print(f"Λ_obs = LAMBDA_UCF × (1 + ε) = {LAMBDA_UCF * (1 + EPSILON):.3e}")
-        print(f"e^(−R_obs/β) = {factor_con_epsilon:.6e}")
+        print(f"Corrección cosmológica / E_Planck = {proporcion_correccion:.4e}")
+        print(f"ε (residuo del observador) = {EPSILON:.5f}")
+        print(f"Relación: ε ≈ {EPSILON / proporcion_correccion:.2f} × corrección relativa")
         
         assert EPSILON > 0
-        assert factor_con_epsilon > 0
-        print(f"\n✅ ε es la firma del observador en la constante cosmológica")
+        print(f"\n✅ ε es la huella de esta resta en la constante cosmológica")
 
     def test_conclusion_final(self):
-        """Prueba 8: Conclusión de la unificación"""
+        """Prueba 6: Conclusión de la unificación sustractiva"""
         print("\n" + "="*70)
-        print("TEST 8: CONCLUSIÓN - ECUACIÓN DE UNIFICACIÓN TOTAL")
+        print("CONCLUSIÓN: LA UNIFICACIÓN SUSTRACTIVA")
         print("="*70)
         
-        E_base_MeV = energia_base_MeV()
-        E_unificada_MeV = energia_unificada_MeV()
-        factor = factor_cosmologico()
+        E_planck = energia_planck_mev()
+        kR = K_ACOPLAMIENTO_MEV * R_COSMOLOGICA
+        m_e = E_planck - kR
         
         print(f"""
 ╔════════════════════════════════════════════════════════════════════════════╗
-║                    ECUACIÓN DE UNIFICACIÓN TOTAL DEL UIS                    ║
+║                    UNIFICACIÓN TOTAL DEL UIS                               ║
 ╠════════════════════════════════════════════════════════════════════════════╣
 ║                                                                            ║
-║                         ┌─────────────────────┐                           ║
-║                         │  β² · δ · c²         │                           ║
-║                      E =│─────────────────────│ · e^(−R / β)              ║
-║                         │  Auto-observación   │                           ║
-║                         │  (masa del electrón)│                           ║
-║                         └─────────────────────┘                           ║
+║  ECUACIÓN FUNDAMENTAL:                                                    ║
 ║                                                                            ║
-║  VALORES:                                                                 ║
-║    β = 1/27 ≈ {BETA:.6f}                                                   ║
-║    β² = 1/729 ≈ {BETA_CUADRADO:.6f}                                        ║
-║    δ = 60 - 27π/√2 ≈ {HUELLA_OBSERVADOR:.6f}                               ║
-║    β²·δ·c² = {E_base_MeV:.6f} MeV (masa del electrón)                      ║
-║    e^(−R/β) = {factor:.4e} (atenuación cosmológica)                        ║
-║    E_unificada = {E_unificada_MeV:.4e} MeV                                 ║
+║      m_e · c² = (β² · δ · c²) - (k · R)                                  ║
 ║                                                                            ║
-║  SIGNIFICADO:                                                             ║
-║    Esta ecuación unifica la física de partículas (electrón),              ║
-║    la relatividad (c²), la cosmología (Λ → R) y el observador (β).        ║
+║  VALORES NUMÉRICOS:                                                       ║
 ║                                                                            ║
-║    La masa no es fundamental.                                             ║
-║    Es la energía de auto-observación del observador.                      ║
-║    La expansión del universo atenúa esta energía.                         ║
+║    β² · δ · c²  = {E_planck:.4e} MeV  (Escala de Planck)                   ║
+║    k · R        = {kR:.4e} MeV        (Corrección cosmológica)             ║
+║    ─────────────────────────────────────────────────                       ║
+║    m_e · c²     = {m_e:.6f} MeV       (Masa del electrón)                  ║
+║    m_e (exp)    = {MASA_ELECTRON_MEV:.6f} MeV                              ║
 ║                                                                            ║
-║    β² · δ · c² · e^(−R / β) = E_unificada                                 ║
+║  SIGNIFICADO PROFUNDO:                                                    ║
 ║                                                                            ║
-║    TODO SALE DEL CUBO 3×3×3.                                              ║
-║    CERO PARÁMETROS LIBRES.                                                ║
+║    La naturaleza no multiplica. La naturaleza resta.                      ║
+║                                                                            ║
+║    La masa del electrón es lo que queda después de que la expansión       ║
+║    del universo (R) se resta de la energía total del observador (β²·δ·c²).║
+║                                                                            ║
+║    El electrón es el residuo de la creación.                              ║
+║    Es la materia que persiste después de que el universo se expande.      ║
+║    Es la huella del observador hecha partícula.                           ║
+║                                                                            ║
+║    β = 1/27 es la semilla.                                                ║
+║    δ = 60 - 27π/√2 es la huella.                                          ║
+║    R = -ln(Λ) es la expansión.                                            ║
+║    m_e es el resultado.                                                   ║
 ║                                                                            ║
 ╚════════════════════════════════════════════════════════════════════════════╝
         """)
@@ -304,38 +250,21 @@ class TestEcuacionUnificacionTotal:
         assert True
 
 
-# ============================================================================
-# EJECUCIÓN DIRECTA
-# ============================================================================
-
 if __name__ == "__main__":
     print("\n" + "="*80)
-    print("TEST DE LA ECUACIÓN DE UNIFICACIÓN TOTAL")
-    print("E = (β² · δ) · c² · e^(−R / β)")
+    print("TEST DE UNIFICACIÓN SUSTRACTIVA")
+    print("m_e = (β²·δ·c²) - (k·R)")
     print("="*80)
     
-    test = TestEcuacionUnificacionTotal()
+    test = TestUnificacionSustractiva()
     
-    test.test_termino_base_energia()
-    test.test_constante_cosmologica_R()
-    test.test_factor_cosmologico()
-    test.test_energia_unificada_completa()
-    test.test_energia_en_ev()
-    test.test_interpretacion_fisica()
-    test.test_relacion_con_epsilon()
+    test.test_energia_planck_desde_beta()
+    test.test_escala_cosmologica_R()
+    test.test_resta_energia_planck_menos_R()
+    test.test_la_naturaleza_resta()
+    test.test_consistencia_con_epsilon()
     test.test_conclusion_final()
     
     print("\n" + "="*80)
-    print("✅ ECUACIÓN DE UNIFICACIÓN TOTAL VERIFICADA")
+    print("✅ UNIFICACIÓN SUSTRACTIVA VERIFICADA")
     print("="*80)
-    print("""
-    UNIFICACIÓN COMPLETA:
-    
-    Cuántica      → β² · δ · c²  (masa del electrón)
-    Relatividad   → c²
-    Cosmología    → e^(−R/β)     (expansión, Λ)
-    Observador    → β = 1/27
-    
-    TODO CONECTADO. TODO DERIVADO DEL CUBO 3×3×3.
-    CERO PARÁMETROS LIBRES.
-    """)

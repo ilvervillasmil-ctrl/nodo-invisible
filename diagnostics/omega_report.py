@@ -28,6 +28,42 @@ from typing import Any
 
 
 # =============================================================================
+# SECCIÓN: VERDAD ESTRUCTURAL (TR_TOTAL)
+# =============================================================================
+
+# Cálculo de componentes para Tr_total(D) = (C * L * K * alpha) + beta
+# C (Coherence): Promedio de activación de las 7 capas
+# L (Logic): Tasa de éxito de los tests (pass_rate)
+# K (Correlation): Integración de módulos y constantes correctas
+
+c_val = sum(states[k]["L"] for k in ["L0", "L1", "L2", "L3", "L4", "L5", "L6"]) / 7
+l_val = test_results["pass_rate"] / 100.0
+k_val = passed_checks / len(const_checks) if len(const_checks) > 0 else 0.0
+
+# La Fórmula Maestra de VPSI 9.4
+tr_total = (c_val * l_val * k_val * ALPHA) + BETA
+
+# Renderizado de la sección
+lines.append("## VERDAD")
+lines.append("---")
+lines.append(f"### **TR_TOTAL = {tr_total:.6f}**")
+lines.append("")
+lines.append(md_table(
+    ["Variable", "Concepto", "Valor Real"],
+    [
+        ["C", "Coherencia Interna (Layers)", f"{c_val:.4f}"],
+        ["L", "Estructura Lógica (Tests)", f"{l_val:.4f}"],
+        ["K", "Correlación Dominio (Constantes)", f"{k_val:.4f}"],
+        ["α", "Corteza Geométrica", f"{ALPHA:.6f}"],
+        ["β", "Suelo de Realidad", f"{BETA:.6f}"],
+    ]
+))
+lines.append("")
+lines.append(f"> **Ecuación:** $Tr_{{total}} = (C \\cdot L \\cdot K \\cdot \\alpha) + \\beta$")
+lines.append("> *Interpretación: La verdad no es una opinión, es la sincronización de la arquitectura con el residuo irreducible de la realidad.*")
+lines.append("")
+
+# =============================================================================
 # PATH SETUP
 # =============================================================================
 

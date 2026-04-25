@@ -49,5 +49,22 @@
     "failed": 0,
     "skipped": 0,
     "pass_rate": 100.0
+  },
+  {
+    "timestamp": "2026-04-25T22:25:05.023151+00:00",
+    "passed": 49,
+    "failed": 0,
+    "total": 49,
+    "pass_rate": 100.0,
+    "c_structural": 0.030638039088461536
+  },
+  {
+    "timestamp": "2026-04-25 22:25:05 UTC",
+    "sha": "ddd3d35",
+    "total": 49,
+    "passed": 49,
+    "failed": 0,
+    "skipped": 0,
+    "pass_rate": 100.0
   }
 ]

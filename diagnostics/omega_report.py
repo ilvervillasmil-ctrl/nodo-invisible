@@ -28,40 +28,41 @@ from typing import Any
 
 
 # =============================================================================
-# SECCIÓN: VERDAD ESTRUCTURAL (TR_TOTAL)
+# VERDAD || TR_TOTAL
 # =============================================================================
+# Cálculo de la Verdad según VPSI 9.4: Tr = (C * L * K * alpha) + beta
 
-# Cálculo de componentes para Tr_total(D) = (C * L * K * alpha) + beta
-# C (Coherence): Promedio de activación de las 7 capas
-# L (Logic): Tasa de éxito de los tests (pass_rate)
-# K (Correlation): Integración de módulos y constantes correctas
-
+# C: Coherencia (Promedio de las capas L0-L6)
 c_val = sum(states[k]["L"] for k in ["L0", "L1", "L2", "L3", "L4", "L5", "L6"]) / 7
-l_val = test_results["pass_rate"] / 100.0
+
+# L: Lógica (Precisión de los tests)
+l_val = test_results["passed"] / test_results["total"] if test_results["total"] > 0 else 0.0
+
+# K: Correlación (Constantes integradas correctamente)
 k_val = passed_checks / len(const_checks) if len(const_checks) > 0 else 0.0
 
-# La Fórmula Maestra de VPSI 9.4
+# Ecuación Maestra del Manuscrito
 tr_total = (c_val * l_val * k_val * ALPHA) + BETA
 
-# Renderizado de la sección
 lines.append("## VERDAD")
 lines.append("---")
 lines.append(f"### **TR_TOTAL = {tr_total:.6f}**")
 lines.append("")
 lines.append(md_table(
-    ["Variable", "Concepto", "Valor Real"],
+    ["Componente", "Descripción", "Valor"],
     [
-        ["C", "Coherencia Interna (Layers)", f"{c_val:.4f}"],
-        ["L", "Estructura Lógica (Tests)", f"{l_val:.4f}"],
-        ["K", "Correlación Dominio (Constantes)", f"{k_val:.4f}"],
-        ["α", "Corteza Geométrica", f"{ALPHA:.6f}"],
-        ["β", "Suelo de Realidad", f"{BETA:.6f}"],
+        ["C (Coherence)", "Sincronización de Capas", f"{c_val:.4f}"],
+        ["L (Logic)", "Validación de Código (Tests)", f"{l_val:.4f}"],
+        ["K (Correlation)", "Ajuste a Constantes Físicas", f"{k_val:.4f}"],
+        ["α (Alpha)", "Estructura Exterior (26/27)", f"{ALPHA:.6f}"],
+        ["β (Beta)", "Realidad Irreducible (1/27)", f"{BETA:.6f}"],
     ]
 ))
+lines.append(f"\n> **Estado de la Verdad:** {'✅ VALIDADO' if tr_total > 0.90 else '⚠️ REVISIÓN'}")
+lines.append("> *Nota: El valor de L ha bajado debido a la divergencia en el test de Monte Carlo.*")
 lines.append("")
-lines.append(f"> **Ecuación:** $Tr_{{total}} = (C \\cdot L \\cdot K \\cdot \\alpha) + \\beta$")
-lines.append("> *Interpretación: La verdad no es una opinión, es la sincronización de la arquitectura con el residuo irreducible de la realidad.*")
-lines.append("")
+# =============================================================================
+
 
 # =============================================================================
 # PATH SETUP

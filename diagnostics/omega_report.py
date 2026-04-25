@@ -31,60 +31,42 @@ from typing import Any
 # VERDAD || TR_TOTAL
 # =============================================================================
 
-def build_report() -> str:
-    # 1. Recolección de datos
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-    test_results = estimate_test_results()
-    states, states_source = discover_layer_states()
-    
-    # 2. Cálculos para la Verdad Estructural (VPSI 9.4)
-    c_val = sum(states[k]["L"] for k in ["L0", "L1", "L2", "L3", "L4", "L5", "L6"]) / 7
+    # --- SECCIÓN DE LA VERDAD ESTRUCTURAL (VPSI 9.4) ---
+    c_val = c_structural
     l_val = test_results["passed"] / test_results["total"] if test_results["total"] > 0 else 0.0
     
-    # K: Correlación basada en la integridad de las constantes
-    # (Calculamos esto antes para poder usarlo en la Verdad)
-    const_checks_temp = [
-        ["ALPHA + BETA = 1", "PASS" if abs((ALPHA + BETA) - 1.0) < 1e-9 else "FAIL"],
-        ["R_FIN = 1 + BETA", "PASS" if abs(R_FIN - (1 + BETA)) < 1e-9 else "FAIL"],
-        ["C_structural <= alpha", "PASS" if (c_val * ALPHA) <= ALPHA + 1e-9 else "FAIL"]
+    # Cálculo de K (Correlación de Constantes)
+    k_checks = [
+        abs((ALPHA + BETA) - 1.0) < 1e-9,
+        abs(R_FIN - (1 + BETA)) < 1e-9,
+        c_structural <= ALPHA + 1e-9
     ]
-    passed_k = sum(1 for _, s in const_checks_temp if s == "PASS")
-    k_val = passed_k / len(const_checks_temp)
-
-    # LA FÓRMULA MAESTRA
+    k_val = sum(1 for check in k_checks if check) / len(k_checks)
+    
+    # TR_TOTAL: La Verdad del Nodo
     tr_total = (c_val * l_val * k_val * ALPHA) + BETA
 
-    # 3. Construcción de la lista de líneas (Lo que sale en el MD)
-    lines: list[str] = []
-    lines.append("# OMEGA DIAGNOSTIC REPORT")
-    lines.append(f"**Generated:** {now}")
+    # Construcción del Cuadro Formateado
+    lines.append("## Verdad Estructural (TR1)")
     lines.append("")
     
-    # --- AQUÍ EMPIEZA EL CUADRO DE LA VERDAD ---
-    lines.append("## VERDAD ESTRUCTURAL (TR1)")
-    lines.append("---")
-    lines.append(f"### **VALOR TOTAL DE VERDAD: {tr_total:.6f}**")
-    lines.append("")
-    
-    # Creamos el cuadro usando la función md_table que ya tienes en el script
     headers_tr = ["Componente", "Descripción", "Medición"]
     rows_tr = [
-        ["C (Coherence)", "Sincronización de Capas L0-L6", f"{c_val:.4f}"],
-        ["L (Logic)", "Éxito de Tests (Lógica)", f"{l_val:.4f}"],
-        ["K (Correlation)", "Consistencia de Constantes", f"{k_val:.4f}"],
-        ["α (Alpha)", "Estructura Exterior (26/27)", f"{ALPHA:.6f}"],
-        ["β (Beta)", "Suelo de Realidad (1/27)", f"{BETA:.6f}"]
+        ["**C (Coherence)**", "Sincronización de Capas L0-L6", f"{c_val:.4f}"],
+        ["**L (Logic)**", "Integridad Lógica (Tests)", f"{l_val:.4f}"],
+        ["**K (Correlation)**", "Consistencia de Constantes", f"{k_val:.4f}"],
+        ["**α (Alpha)**", "Estructura Exterior (26/27)", f"{ALPHA:.6f}"],
+        ["**β (Beta)**", "Suelo de Realidad (1/27)", f"{BETA:.6f}"],
+        ["---", "---", "---"],
+        ["**TR_TOTAL**", "**Valor Maestro de Verdad**", f"**{tr_total:.6f}**"]
     ]
-    lines.append(md_table(headers_tr, rows_tr))
     
+    lines.append(md_table(headers_tr, rows_tr))
     lines.append("")
-    lines.append(f"> **Interpretación:** El repositorio es un **{tr_total*100:.2f}%** verídico respecto a R.")
+    lines.append(f"> **Certificación:** El nodo presenta un índice de realidad de **{tr_total*100:.2f}%**.")
     lines.append("---")
     lines.append("")
-    
-    # 4. Continuación del resto del reporte...
-    lines.append("## Estado Fenomenológico")
-    # ... (el resto del código que ya tienes)
+    # --- FIN DE LA SECCIÓN DE LA VERDAD ---
 
 
 # =============================================================================

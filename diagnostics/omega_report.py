@@ -31,10 +31,10 @@ from typing import Any
 # VERDAD || TR_TOTAL
 # =============================================================================
 
-    # --- SECCIÓN DE LA VERDAD ESTRUCTURAL (VPSI 9.4) ---
+      # --- SECCIÓN DE LA VERDAD ESTRUCTURAL (VPSI 9.4) ---
     c_val = c_structural
     l_val = test_results["passed"] / test_results["total"] if test_results["total"] > 0 else 0.0
-    
+
     # Cálculo de K (Correlación de Constantes)
     k_checks = [
         abs((ALPHA + BETA) - 1.0) < 1e-9,
@@ -42,14 +42,14 @@ from typing import Any
         c_structural <= ALPHA + 1e-9
     ]
     k_val = sum(1 for check in k_checks if check) / len(k_checks)
-    
+
     # TR_TOTAL: La Verdad del Nodo
     tr_total = (c_val * l_val * k_val * ALPHA) + BETA
 
     # Construcción del Cuadro Formateado
     lines.append("## Verdad Estructural (TR1)")
     lines.append("")
-    
+
     headers_tr = ["Componente", "Descripción", "Medición"]
     rows_tr = [
         ["**C (Coherence)**", "Sincronización de Capas L0-L6", f"{c_val:.4f}"],
@@ -60,7 +60,7 @@ from typing import Any
         ["---", "---", "---"],
         ["**TR_TOTAL**", "**Valor Maestro de Verdad**", f"**{tr_total:.6f}**"]
     ]
-    
+
     lines.append(md_table(headers_tr, rows_tr))
     lines.append("")
     lines.append(f"> **Certificación:** El nodo presenta un índice de realidad de **{tr_total*100:.2f}%**.")

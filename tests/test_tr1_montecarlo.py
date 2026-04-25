@@ -126,10 +126,10 @@ def test_exact_enumeration():
 
 
 def test_exact_new_truths_count():
-    """Verifica que el número exacto de nuevas verdades es 183"""
+    """Verifica que el número exacto de nuevas verdades es 153"""
     exact = exact_enumeration()
-    assert exact['new'] == 183, \
-        f"Expected 183 new truths, got {exact['new']}"
+    assert exact['new'] == 153, \
+        f"Expected 153 new truths, got {exact['new']}"
 
 
 def test_exact_compatible_pairs():

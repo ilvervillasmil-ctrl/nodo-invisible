@@ -1,5 +1,5 @@
 """
-tr1_montecarlo.py
+test_tr1_montecarlo.py
 =================
 Monte Carlo Adversarial Verification of Theorem TR1
 Structural Generativity of the VPSI Framework
@@ -312,8 +312,8 @@ if __name__ == "__main__":
     print(f"  New truths |Im(+)|              = {exact['new']}")
     print(f"  Redundant                       = {exact['redundant']}")
     print(f"  Incompatible                    = {exact['incompatible']}")
-    print(f"  Verification 183+93={exact['compatible']+exact['incompatible']}  {chr(10003) if exact['compatible']+exact['incompatible']==276 else 'FAIL'}")
-    print(f"  Verification 153+30={exact['new']+exact['redundant']}  {chr(10003) if exact['new']+exact['redundant']==183 else 'FAIL'}")
+    print(f"  Verification {exact['compatible']}+{exact['incompatible']}={exact['compatible']+exact['incompatible']}  {chr(10003) if exact['compatible']+exact['incompatible']==276 else 'FAIL'}")
+    print(f"  Verification {exact['new']}+{exact['redundant']}={exact['new']+exact['redundant']}  {chr(10003) if exact['new']+exact['redundant']==exact['compatible'] else 'FAIL'}")
     print(f"  TR1 conclusion: {exact['new']} > {N} = |Theta|  {chr(10003)}")
 
     # --- Monte Carlo scenarios (1,800,000 iterations split across 6 scenarios) ---
@@ -321,11 +321,11 @@ if __name__ == "__main__":
 
     scenarios = [
         ("E0 -- Baseline no noise",           0.00,  False, 0.00),
-        ("E1 -- Low noise sigma=0.05",         0.05,  False, 0.00),
-        ("E2 -- Medium noise sigma=0.15",      0.15,  False, 0.00),
-        ("E3 -- High noise sigma=0.30",        0.30,  False, 0.00),
-        ("E4 -- Confusion Ri=R (T12 attack)",  0.15,  True,  0.00),
-        ("E5 -- Forced collapse p=0.10",       0.10,  False, 0.10),
+        ("E1 -- Low noise sigma=0.05",        0.05,  False, 0.00),
+        ("E2 -- Medium noise sigma=0.15",     0.15,  False, 0.00),
+        ("E3 -- High noise sigma=0.30",       0.30,  False, 0.00),
+        ("E4 -- Confusion Ri=R (T12 attack)", 0.15,  True,  0.00),
+        ("E5 -- Forced collapse p=0.10",      0.10,  False, 0.10),
     ]
 
     print(f"\n[MONTE CARLO SCENARIOS]  ({iters_each:,} iter each)")

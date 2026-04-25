@@ -164,7 +164,6 @@ def test_constants_values():
     assert abs(BETA - 1/27) < 1e-15
     assert ALPHA + BETA == 1.0
 
-
 # ============================================================
 # MONTE CARLO TESTS - DIAGNÓSTICO DE SOBERANÍA (VPSI v3.3)
 # ============================================================
@@ -172,15 +171,18 @@ def test_constants_values():
 def test_monte_carlo_generativity_sovereignty():
     """
     Monte Carlo: Diagnóstico de niveles de certeza y generatividad.
-    Evalúa si la verdad detectada pertenece al Algoritmo, al Observador o a la Realidad.
+    Mantiene la evaluación estructural de TR1 pero anexa el diagnóstico por porcentajes.
     """
-    # Importación de constantes estructurales del framework
-    from constants import BETA, EPSILON_OBSERVER 
+    # Definición local para evitar ModuleNotFoundError en entornos CI
+    B_REALITY = 1/27          # 0.0370... (Nivel 3: Realidad)
+    E_OBSERVER = 0.02716      # 0.0271... (Nivel 2: Observador/Ilver)
+    A_LIMIT = 0.0018          # 0.0018    (Nivel 1: Algoritmo)
     
     n_iter = 500_000  
     generative = 0
     redundant = 0
     
+    # --- PROCESO MONTE CARLO (Intacto) ---
     for _ in range(n_iter):
         i = random.randint(0, N - 1)
         j = random.randint(0, N - 1)
@@ -207,25 +209,21 @@ def test_monte_carlo_generativity_sovereignty():
     # Diferencia entre la simulación y la verdad geométrica
     diff = abs(gen_rate - expected_rate)
     
-    # --- UMBRALES DE SOBERANÍA (Jerarquía Ilver Villasmil) ---
-    ALGO_LIMIT    = 0.0018            # Límite de certeza del Algoritmo
-    OBSERVER_LIMIT = EPSILON_OBSERVER # 0.027... (Tu huella / Helicson)
-    REALITY_LIMIT  = BETA             # 0.037... (El suelo de la Realidad)
-
-    print(f"\n[DIAGNÓSTICO DE SOBERANÍA OMEGA]")
-    print(f"Diferencia observada: {diff:.6f}")
+    # --- ANEXO: DIAGNÓSTICO POR PORCENTAJES ---
+    print(f"\n[MONITOR DE SOBERANÍA OMEGA]")
+    print(f"Diferencia: {diff:.6f} ({diff*100:.4f}%)")
     print("-" * 40)
     
-    if diff <= ALGO_LIMIT:
-        print(">>> SOBERANÍA: ALGORITMO (La máquina sostiene la certeza)")
-    elif diff <= OBSERVER_LIMIT:
-        print(f">>> SOBERANÍA: OBSERVADOR (Huella Epsilon detectada: {OBSERVER_LIMIT:.4f})")
-    elif diff <= REALITY_LIMIT:
-        print(f">>> SOBERANÍA: REALIDAD (Anclaje en suelo Beta detectado: {REALITY_LIMIT:.4f})")
+    if diff <= A_LIMIT:
+        print(f"ESTADO: NIVEL 1 - 0.18% (Soberanía del Algoritmo)")
+    elif diff <= E_OBSERVER:
+        print(f"ESTADO: NIVEL 2 - 2.71% (Soberanía del Observador)")
+    elif diff <= B_REALITY:
+        print(f"ESTADO: NIVEL 3 - 3.70% (Soberanía de la Realidad)")
     
-    # El ASSERT MAESTRO: La realidad siempre gana. El test pasa si está bajo Beta.
-    assert diff < REALITY_LIMIT, \
-        f"COLAPSO ESTRUCTURAL: La incertidumbre {diff:.6f} superó el límite de la Realidad {REALITY_LIMIT:.4f}"
+    # El ASSERT MAESTRO encuadrado en el porcentaje de Realidad (Nivel 3)
+    assert diff < B_REALITY, \
+        f"COLAPSO: La incertidumbre {diff*100:.4f}% superó el límite de la Realidad ({B_REALITY*100:.2f}%)"
     
     # Verificación de integridad por regla de tres
     estimated_new = int(round(gen_rate * exact['compatible']))
@@ -237,6 +235,7 @@ def test_monte_carlo_noise_scenario():
     n_iter = 2_000_000
     sigma = 0.15
     violations = 0
+    B_LOCAL = 1/27
     
     for _ in range(n_iter):
         C = max(0.0, min(1.0, beta_sample(5, 1.5) + random.gauss(0, sigma)))
@@ -244,10 +243,9 @@ def test_monte_carlo_noise_scenario():
         K = max(0.0, min(1.0, beta_sample(4, 2.0) + random.gauss(0, sigma)))
         R = 1.0
         
-        tru = C * L * K * R * ALPHA + BETA
+        tru = C * L * K * R * ALPHA + B_LOCAL
         
-        # El sistema se mantiene veraz si está dentro del rango [BETA, 1.0]
-        if tru < BETA - 1e-12 or tru > 1.0 + 1e-12:
+        if tru < B_LOCAL - 1e-12 or tru > 1.0 + 1e-12:
             violations += 1
     
     assert violations == 0, f"Violations in noise scenario: {violations}"
@@ -258,16 +256,17 @@ def test_monte_carlo_confusion_scenario():
     n_iter = 1_000_000
     sigma = 0.15
     violations = 0
+    B_LOCAL = 1/27
     
     for _ in range(n_iter):
         C = max(0.0, min(1.0, beta_sample(5, 1.5) + random.gauss(0, sigma)))
         L = max(0.0, min(1.0, beta_sample(5, 1.5) + random.gauss(0, sigma)))
         K = max(0.0, min(1.0, beta_sample(4, 2.0) + random.gauss(0, sigma)))
-        R = C * L * K  # Confusión Ri = R
+        R = C * L * K 
         
-        tru = C * L * K * R * ALPHA + BETA
+        tru = C * L * K * R * ALPHA + B_LOCAL
         
-        if tru < BETA - 1e-12 or tru > 1.0 + 1e-12:
+        if tru < B_LOCAL - 1e-12 or tru > 1.0 + 1e-12:
             violations += 1
     
     assert violations == 0, f"Violations in confusion scenario: {violations}"
@@ -278,6 +277,7 @@ def test_monte_carlo_collapse_scenario():
     n_iter = 1_000_000
     collapse_p = 0.10
     violations = 0
+    B_LOCAL = 1/27
     
     for _ in range(n_iter):
         C = beta_sample(5, 1.5)
@@ -291,9 +291,9 @@ def test_monte_carlo_collapse_scenario():
             else: K = 0.0
         
         R = 1.0
-        tru = C * L * K * R * ALPHA + BETA
+        tru = C * L * K * R * ALPHA + B_LOCAL
         
-        if tru < BETA - 1e-12 or tru > 1.0 + 1e-12:
+        if tru < B_LOCAL - 1e-12 or tru > 1.0 + 1e-12:
             violations += 1
     
     assert violations == 0, f"Violations in collapse scenario: {violations}"
@@ -304,6 +304,7 @@ def test_tr1_pij_truth_bounds():
     n_iter = 200_000
     floor_viol = 0
     ceil_viol = 0
+    B_LOCAL = 1/27
     
     for _ in range(n_iter):
         i = random.randint(0, N - 1)
@@ -323,13 +324,14 @@ def test_tr1_pij_truth_bounds():
             K = beta_sample(4, 2.0)
             tru = tru_total(C, L, K)
             
-            if tru < BETA - 1e-12:
+            if tru < B_LOCAL - 1e-12:
                 floor_viol += 1
             if tru > 1.0 + 1e-12:
                 ceil_viol += 1
     
     assert floor_viol == 0, f"Floor violations: {floor_viol} (Tru < β)"
     assert ceil_viol == 0, f"Ceiling violations: {ceil_viol} (Tru > 1)"
+
 
 
 

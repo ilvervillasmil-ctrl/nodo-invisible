@@ -32,46 +32,60 @@ from typing import Any
 # =============================================================================
 
 def build_report() -> str:
-    # 1. PREPARACIÓN DE DATOS (Necesarios para la Verdad)
+    # 1. Recolección de datos
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     test_results = estimate_test_results()
-    states, states_source = discover_layer_states() # <-- Aquí se define 'states'
+    states, states_source = discover_layer_states()
     
-    # 2. CÁLCULO DE LA VERDAD ESTRUCTURAL (VPSI 9.4)
-    # C: Coherencia de capas
+    # 2. Cálculos para la Verdad Estructural (VPSI 9.4)
     c_val = sum(states[k]["L"] for k in ["L0", "L1", "L2", "L3", "L4", "L5", "L6"]) / 7
-    # L: Lógica de tests
     l_val = test_results["passed"] / test_results["total"] if test_results["total"] > 0 else 0.0
-    # K: Correlación (ajuste este cálculo según tus constantes de integridad)
-    k_val = test_results["pass_rate"] / 100.0 # O usar el contador de checks si ya están definidos
     
+    # K: Correlación basada en la integridad de las constantes
+    # (Calculamos esto antes para poder usarlo en la Verdad)
+    const_checks_temp = [
+        ["ALPHA + BETA = 1", "PASS" if abs((ALPHA + BETA) - 1.0) < 1e-9 else "FAIL"],
+        ["R_FIN = 1 + BETA", "PASS" if abs(R_FIN - (1 + BETA)) < 1e-9 else "FAIL"],
+        ["C_structural <= alpha", "PASS" if (c_val * ALPHA) <= ALPHA + 1e-9 else "FAIL"]
+    ]
+    passed_k = sum(1 for _, s in const_checks_temp if s == "PASS")
+    k_val = passed_k / len(const_checks_temp)
+
+    # LA FÓRMULA MAESTRA
     tr_total = (c_val * l_val * k_val * ALPHA) + BETA
 
-    # 3. CONSTRUCCIÓN DEL REPORTE
+    # 3. Construcción de la lista de líneas (Lo que sale en el MD)
     lines: list[str] = []
     lines.append("# OMEGA DIAGNOSTIC REPORT")
-    lines.append(f"**Generated:** {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}")
+    lines.append(f"**Generated:** {now}")
     lines.append("")
-
-    # --- SECCIÓN DE LA VERDAD (PUESTA DE PRIMERO) ---
-    lines.append("## VERDAD")
+    
+    # --- AQUÍ EMPIEZA EL CUADRO DE LA VERDAD ---
+    lines.append("## VERDAD ESTRUCTURAL (TR1)")
     lines.append("---")
-    lines.append(f"### **TR_TOTAL = {tr_total:.6f}**")
+    lines.append(f"### **VALOR TOTAL DE VERDAD: {tr_total:.6f}**")
     lines.append("")
-    lines.append(md_table(
-        ["Componente", "Descripción", "Valor"],
-        [
-            ["C (Coherence)", "Sincronización de Capas", f"{c_val:.4f}"],
-            ["L (Logic)", "Validación de Código (Tests)", f"{l_val:.4f}"],
-            ["K (Correlation)", "Ajuste Estructural", f"{k_val:.4f}"],
-            ["α (Alpha)", "Corteza Geométrica", f"{ALPHA:.6f}"],
-            ["β (Beta)", "Realidad Irreducible", f"{BETA:.6f}"],
-        ]
-    ))
-    lines.append(f"\n> **Estado de la Verdad:** {'✅ VALIDADO' if tr_total > 0.85 else '⚠️ REVISIÓN'}")
+    
+    # Creamos el cuadro usando la función md_table que ya tienes en el script
+    headers_tr = ["Componente", "Descripción", "Medición"]
+    rows_tr = [
+        ["C (Coherence)", "Sincronización de Capas L0-L6", f"{c_val:.4f}"],
+        ["L (Logic)", "Éxito de Tests (Lógica)", f"{l_val:.4f}"],
+        ["K (Correlation)", "Consistencia de Constantes", f"{k_val:.4f}"],
+        ["α (Alpha)", "Estructura Exterior (26/27)", f"{ALPHA:.6f}"],
+        ["β (Beta)", "Suelo de Realidad (1/27)", f"{BETA:.6f}"]
+    ]
+    lines.append(md_table(headers_tr, rows_tr))
+    
+    lines.append("")
+    lines.append(f"> **Interpretación:** El repositorio es un **{tr_total*100:.2f}%** verídico respecto a R.")
     lines.append("---")
     lines.append("")
     
-    # ... (El resto del código del reporte sigue aquí)
+    # 4. Continuación del resto del reporte...
+    lines.append("## Estado Fenomenológico")
+    # ... (el resto del código que ya tienes)
+
 
 # =============================================================================
 # PATH SETUP

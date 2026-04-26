@@ -1,8 +1,8 @@
 # OMEGA DIAGNOSTIC REPORT
-**Generated:** 2026-04-26 17:06:50 UTC
+**Generated:** 2026-04-26 17:40:16 UTC
 **Framework:** UCF v3.2 (Universal Coherence Framework)
 **Author:** Ilver Villasmil
-**Commit:** `a2692da`
+**Commit:** `d32fd91`
 
 ---
 
@@ -18,7 +18,7 @@
 | L7 (Integración) | 0.796589 | ← INTEGRATED |
 | Umbral crítico (0.72) | ❌ BAJO | ← debajo = entropía acelerada |
 | Umbral survival (0.10) | ❌ BAJO | ← debajo = cohesión mínima comprometida |
-| Tendencia | ↑ CRECIENDO (+10) |  |
+| Tendencia | ↑ CRECIENDO (+3) |  |
 
 > **Nota semántica v2.1:** C_struct ≠ C_global ≠ C_CI.
 > Solo C_struct es la coherencia estructural real del framework.
@@ -73,8 +73,8 @@
 
 | Metric | Value |
 | --- | --- |
-| Total Tests | **61** |
-| Passed | 61 |
+| Total Tests | **64** |
+| Passed | 64 |
 | Failed | 0 |
 | Skipped | 0 |
 | Pass Rate | 100.00%  (C_CI = 1.0000) |
@@ -84,7 +84,7 @@
 Últimos 10 runs:
 
 ```
-47 → 47 → 47 → 49 → 49 → 49 → 49 → 51 → 51 → 61
+47 → 49 → 49 → 49 → 49 → 51 → 51 → 61 → 61 → 64
 ```
 
 ## Constants Integrity

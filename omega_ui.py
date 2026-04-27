@@ -1,604 +1,417 @@
 #!/usr/bin/env python3
 """
-omega_ui.py — Interfaz Gráfica del Agente Omega
-Detecta el sistema operativo y se adapta.
-Si le falta algo, lo busca, lo instala, lo aprende.
-
-Ejecutar:
-    python omega_ui.py
+omega_ui.py — Ventana gráfica del Agente Omega
+Detecta el OS. Abre ventana. Si falta algo, lo instala.
 """
 
-import os
-import sys
-import threading
-import subprocess
-import platform
+import os, sys, threading, subprocess, platform
 from pathlib import Path
 
-# ──────────────────────────────────────────────
-# DETECCIÓN DE OS ANTES DE TODO
-# ──────────────────────────────────────────────
-OS       = platform.system()   # Darwin | Linux | Windows
-OS_VER   = platform.version()
-REPO     = Path(__file__).parent
+OS   = platform.system()
+REPO = Path(__file__).parent.resolve()
+PY   = sys.executable
 sys.path.insert(0, str(REPO))
 
-# ──────────────────────────────────────────────
-# AUTO-INSTALADOR: si falta algo, lo instala
-# ──────────────────────────────────────────────
+# ── Auto-instalar dependencias UI ──────────────
+def pip(pkg):
+    subprocess.run([PY,"-m","pip","install",pkg,"-q"], capture_output=True)
 
-def install(pkg: str) -> bool:
-    print(f"[AUTO-INSTALL] {pkg}...")
-    r = subprocess.run(
-        [sys.executable, "-m", "pip", "install", pkg, "-q"],
-        capture_output=True
-    )
-    return r.returncode == 0
-
-def ensure(*packages):
-    """Garantiza que los paquetes estén disponibles."""
-    for pkg in packages:
-        module = pkg.split("[")[0].replace("-", "_")
-        try:
-            __import__(module)
-        except ImportError:
-            install(pkg)
-
-# Garantiza dependencias UI
-ensure("tkinter")  # nativo en Python, pero por si acaso
 try:
     import tkinter as tk
-    from tkinter import scrolledtext, ttk
+    from tkinter import scrolledtext
     HAS_TK = True
 except ImportError:
-    HAS_TK = False
-    print("[UI] tkinter no disponible. Instalando alternativa...")
-    ensure("PySimpleGUI")
+    pip("tk"); HAS_TK = False
 
-# TTS según OS
-if OS == "Darwin":
-    TTS_CMD = lambda text: subprocess.Popen(["say", text])
-elif OS == "Linux":
-    ensure("pyttsx3")
-    TTS_CMD = None  # se inicializa después
-elif OS == "Windows":
-    ensure("pyttsx3")
-    TTS_CMD = None
-
-# STT
-ensure("SpeechRecognition")
+# ── Importar agente ────────────────────────────
 try:
-    ensure("pyaudio")
-except Exception:
-    if OS == "Linux":
-        subprocess.run(
-            ["sudo", "apt-get", "install", "-y", "python3-pyaudio"],
-            capture_output=True
-        )
-    elif OS == "Windows":
-        ensure("pipwin")
-        subprocess.run([sys.executable, "-m", "pipwin", "install", "pyaudio"])
-
-
-# ──────────────────────────────────────────────
-# IMPORTAR EL AGENTE
-# ──────────────────────────────────────────────
-try:
-    from omega_agent import OmegaAgent
+    from omega_agent import OmegaAgent, BETA, LAMBDA_UCF, EPSILON_OBSERVER
     AGENT_OK = True
 except Exception as e:
-    print(f"[ERROR] No se pudo importar OmegaAgent: {e}")
+    print(f"[ERROR] {e}")
     AGENT_OK = False
 
 
 # ══════════════════════════════════════════════
-# TTS MULTIPLATAFORMA
+# SPEAKER
 # ══════════════════════════════════════════════
-
 class Speaker:
-    """Habla en el idioma del sistema operativo."""
-
     def __init__(self):
-        self.engine = None
-        self._init()
-
-    def _init(self):
+        self.mode = "none"
         if OS == "Darwin":
             self.mode = "say"
         else:
             try:
-                import pyttsx3
-                self.engine = pyttsx3.init()
-                # Configura voz en español si está disponible
-                voices = self.engine.getProperty("voices")
-                for v in voices:
-                    if "spanish" in v.name.lower() or "es" in v.id.lower():
-                        self.engine.setProperty("voice", v.id)
-                        break
-                self.engine.setProperty("rate", 175)
-                self.mode = "pyttsx3"
-            except Exception:
-                self.mode = "none"
+                import pyttsx3; self.mode = "pyttsx3"
+            except ImportError:
+                pip("pyttsx3")
+                try:
+                    import pyttsx3; self.mode = "pyttsx3"
+                except Exception:
+                    pass
 
-    def speak(self, text: str):
-        if not text.strip():
-            return
+    def speak(self, text):
+        if not text.strip(): return
         try:
             if self.mode == "say":
-                subprocess.Popen(["say", "-v", "Mónica", text])
+                subprocess.Popen(["say", text])
             elif self.mode == "pyttsx3":
-                t = threading.Thread(
-                    target=self._speak_thread, args=(text,), daemon=True
-                )
-                t.start()
-            else:
-                print(f"[VOZ] {text}")
-        except Exception as e:
-            print(f"[TTS-ERROR] {e}")
-
-    def _speak_thread(self, text: str):
-        try:
-            import pyttsx3
-            eng = pyttsx3.init()
-            eng.say(text)
-            eng.runAndWait()
-        except Exception:
-            pass
+                def _run():
+                    import pyttsx3
+                    e = pyttsx3.init(); e.say(text[:200]); e.runAndWait()
+                threading.Thread(target=_run, daemon=True).start()
+        except Exception: pass
 
 
 # ══════════════════════════════════════════════
-# STT MULTIPLATAFORMA
+# LISTENER
 # ══════════════════════════════════════════════
-
 class Listener:
-    """Escucha el micrófono del sistema."""
-
     def __init__(self):
-        self.available = False
+        self.ok = False
         try:
             import speech_recognition as sr
             self.sr = sr
-            self.recognizer = sr.Recognizer()
-            self.available = True
+            self.rec = sr.Recognizer()
+            self.ok = True
         except ImportError:
-            print("[STT] SpeechRecognition no disponible.")
-
-    def listen_once(self, timeout: int = 6) -> str:
-        """Escucha una vez y devuelve el texto."""
-        if not self.available:
-            return ""
-        try:
-            with self.sr.Microphone() as source:
-                self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
-                audio = self.recognizer.listen(source, timeout=timeout)
-            # Intenta español primero, luego inglés
+            pip("SpeechRecognition")
             try:
-                return self.recognizer.recognize_google(audio, language="es-ES")
-            except Exception:
-                return self.recognizer.recognize_google(audio, language="en-US")
-        except self.sr.WaitTimeoutError:
-            return ""
-        except Exception as e:
-            return ""
+                import speech_recognition as sr
+                self.sr = sr; self.rec = sr.Recognizer(); self.ok = True
+            except Exception: pass
+
+    def listen(self, timeout=6) -> str:
+        if not self.ok: return ""
+        try:
+            with self.sr.Microphone() as src:
+                self.rec.adjust_for_ambient_noise(src, duration=0.3)
+                audio = self.rec.listen(src, timeout=timeout)
+            try:    return self.rec.recognize_google(audio, language="es-ES")
+            except: return self.rec.recognize_google(audio, language="en-US")
+        except Exception: return ""
 
 
 # ══════════════════════════════════════════════
-# INTERFAZ GRÁFICA PRINCIPAL
+# INTERFAZ GRÁFICA
 # ══════════════════════════════════════════════
-
 class OmegaUI:
-    """
-    Ventana de chat con el agente Omega.
-    - Casilla de texto para escribir
-    - Botón de voz para hablar
-    - Panel de estado del sistema
-    - Se adapta a Windows / macOS / Linux
-    """
-
-    # Colores UIS
-    BG          = "#0a0a0f"
-    BG_PANEL    = "#12121a"
-    BG_INPUT    = "#1a1a2e"
-    FG          = "#e0e0ff"
-    FG_DIM      = "#6060a0"
-    ACCENT      = "#4040ff"
-    ACCENT2     = "#00ffaa"
-    BETA_COLOR  = "#ff6060"
-    ERROR       = "#ff4040"
-    SUCCESS     = "#00ff88"
+    BG      = "#07070f"
+    BG2     = "#0f0f1a"
+    BG3     = "#16162a"
+    FG      = "#d0d0ff"
+    DIM     = "#5050a0"
+    ACCENT  = "#3355ff"
+    GREEN   = "#00ffaa"
+    RED     = "#ff4455"
+    GOLD    = "#ffcc00"
+    FONT    = ("Courier", 11)
+    FONT_SM = ("Courier", 9)
+    FONT_LG = ("Courier", 13, "bold")
 
     def __init__(self):
         if not HAS_TK:
-            self._run_fallback()
-            return
+            self._fallback(); return
 
         self.root = tk.Tk()
         self.root.title("Ω  Universal Integration System")
         self.root.configure(bg=self.BG)
-        self.root.geometry("900x650")
-        self.root.minsize(600, 400)
+        self.root.geometry("960x660")
+        self.root.minsize(700, 450)
 
-        # Icono (si existe en el repo)
-        icon_path = REPO / "ilver" / "icon.png"
-        if icon_path.exists():
-            try:
-                from PIL import Image, ImageTk
-                img = ImageTk.PhotoImage(Image.open(icon_path))
-                self.root.iconphoto(True, img)
-            except Exception:
-                pass
+        self.speaker   = Speaker()
+        self.listener  = Listener()
+        self.agent     = OmegaAgent() if AGENT_OK else None
+        self.listening = False
+        self._cmd_hist = []
+        self._hist_idx = 0
 
-        # Componentes
-        self.speaker  = Speaker()
-        self.listener = Listener()
-        self.agent    = OmegaAgent() if AGENT_OK else None
-
-        # Estado
-        self.listening   = False
-        self.agent_ready = AGENT_OK
-
-        # Construir UI
-        self._build_ui()
-
-        # Mensaje de bienvenida
+        self._build()
         self._welcome()
+        self.root.protocol("WM_DELETE_WINDOW", self._close)
 
-        # Protocolo de cierre
-        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+    # ── CONSTRUIR UI ──────────────────────────
+    def _build(self):
 
-    # ── CONSTRUCCIÓN DE LA UI ────────────────
+        # BARRA SUPERIOR
+        top = tk.Frame(self.root, bg=self.BG2, height=48)
+        top.pack(fill="x")
+        top.pack_propagate(False)
 
-    def _build_ui(self):
-        """Construye todos los widgets."""
+        tk.Label(top, text="Ω  UNIVERSAL INTEGRATION SYSTEM",
+                 bg=self.BG2, fg=self.ACCENT, font=self.FONT_LG
+                 ).pack(side="left", padx=15, pady=10)
 
-        # ── BARRA SUPERIOR ───────────────────
-        top_bar = tk.Frame(self.root, bg=self.BG_PANEL, height=50)
-        top_bar.pack(fill="x", side="top")
-        top_bar.pack_propagate(False)
+        self.lbl_coh = tk.Label(top, text="C_ω = ···",
+                                bg=self.BG2, fg=self.DIM, font=self.FONT_SM)
+        self.lbl_coh.pack(side="right", padx=15)
 
-        tk.Label(
-            top_bar,
-            text="Ω  UNIVERSAL INTEGRATION SYSTEM",
-            bg=self.BG_PANEL, fg=self.ACCENT,
-            font=("Courier", 13, "bold")
-        ).pack(side="left", padx=15, pady=12)
+        tk.Label(top, text=f"β=1/27  |  {OS}",
+                 bg=self.BG2, fg=self.DIM, font=self.FONT_SM
+                 ).pack(side="right", padx=5)
 
-        # Indicador de OS
-        tk.Label(
-            top_bar,
-            text=f"{OS} | β=0.037037",
-            bg=self.BG_PANEL, fg=self.FG_DIM,
-            font=("Courier", 9)
-        ).pack(side="right", padx=15)
+        # CUERPO PRINCIPAL
+        body = tk.Frame(self.root, bg=self.BG)
+        body.pack(fill="both", expand=True, padx=8, pady=6)
 
-        # ── PANEL PRINCIPAL ──────────────────
-        main = tk.Frame(self.root, bg=self.BG)
-        main.pack(fill="both", expand=True, padx=10, pady=5)
+        # ── CHAT (izquierda) ──────────────────
+        left = tk.Frame(body, bg=self.BG)
+        left.pack(side="left", fill="both", expand=True)
 
-        # ── CHAT (izquierda, 70%) ────────────
-        chat_frame = tk.Frame(main, bg=self.BG)
-        chat_frame.pack(side="left", fill="both", expand=True)
-
-        # Área de mensajes
-        self.chat_area = scrolledtext.ScrolledText(
-            chat_frame,
-            wrap=tk.WORD,
-            bg=self.BG, fg=self.FG,
-            font=("Courier", 11),
-            insertbackground=self.ACCENT,
+        self.chat = scrolledtext.ScrolledText(
+            left, wrap=tk.WORD,
+            bg=self.BG, fg=self.FG, font=self.FONT,
+            insertbackground=self.GREEN,
             selectbackground=self.ACCENT,
             relief="flat", bd=0,
-            state="disabled",
-            padx=10, pady=10,
+            state="disabled", padx=10, pady=8,
         )
-        self.chat_area.pack(fill="both", expand=True)
+        self.chat.pack(fill="both", expand=True)
 
-        # Tags de color
-        self.chat_area.tag_config("user",   foreground=self.ACCENT2)
-        self.chat_area.tag_config("omega",  foreground=self.FG)
-        self.chat_area.tag_config("system", foreground=self.FG_DIM)
-        self.chat_area.tag_config("beta",   foreground=self.BETA_COLOR)
-        self.chat_area.tag_config("ok",     foreground=self.SUCCESS)
-        self.chat_area.tag_config("error",  foreground=self.ERROR)
+        # Tags
+        self.chat.tag_config("user",   foreground=self.GREEN)
+        self.chat.tag_config("omega",  foreground=self.FG)
+        self.chat.tag_config("sys",    foreground=self.DIM)
+        self.chat.tag_config("beta",   foreground=self.GOLD)
+        self.chat.tag_config("ok",     foreground=self.GREEN)
+        self.chat.tag_config("err",    foreground=self.RED)
 
-        # ── BARRA DE ENTRADA ─────────────────
-        input_frame = tk.Frame(chat_frame, bg=self.BG_INPUT, pady=5)
-        input_frame.pack(fill="x", pady=(5, 0))
+        # INPUT
+        inp_frame = tk.Frame(left, bg=self.BG3, pady=4)
+        inp_frame.pack(fill="x", pady=(4,0))
 
-        # Campo de texto
         self.input_var = tk.StringVar()
-        self.input_field = tk.Entry(
-            input_frame,
-            textvariable=self.input_var,
-            bg=self.BG_INPUT, fg=self.FG,
+        self.entry = tk.Entry(
+            inp_frame, textvariable=self.input_var,
+            bg=self.BG3, fg=self.FG,
             font=("Courier", 12),
-            insertbackground=self.ACCENT2,
+            insertbackground=self.GREEN,
             relief="flat", bd=0,
         )
-        self.input_field.pack(
-            side="left", fill="x", expand=True,
-            padx=(10, 5), ipady=8
-        )
-        self.input_field.bind("<Return>", self._on_send)
-        self.input_field.bind("<Up>",     self._history_up)
-        self.input_field.focus()
+        self.entry.pack(side="left", fill="x", expand=True, padx=(10,4), ipady=8)
+        self.entry.bind("<Return>", self._send)
+        self.entry.bind("<Up>",     self._hist_up)
+        self.entry.bind("<Down>",   self._hist_down)
+        self.entry.focus()
 
-        # Botón ENVIAR
-        self.btn_send = tk.Button(
-            input_frame,
-            text="ENVIAR",
-            command=self._on_send,
-            bg=self.ACCENT, fg="white",
-            font=("Courier", 10, "bold"),
-            relief="flat", cursor="hand2",
-            padx=12, pady=6,
-        )
-        self.btn_send.pack(side="left", padx=5)
+        tk.Button(inp_frame, text="ENVIAR",
+                  command=self._send,
+                  bg=self.ACCENT, fg="white",
+                  font=("Courier", 10, "bold"),
+                  relief="flat", cursor="hand2",
+                  padx=12, pady=6,
+                  ).pack(side="left", padx=4)
 
-        # Botón MICRÓFONO
         self.btn_mic = tk.Button(
-            input_frame,
-            text="🎤",
-            command=self._on_mic,
-            bg=self.BG_PANEL, fg=self.FG,
+            inp_frame, text="🎤",
+            command=self._mic,
+            bg=self.BG2, fg=self.FG,
             font=("Courier", 14),
             relief="flat", cursor="hand2",
             padx=8, pady=4,
-            state="normal" if self.listener.available else "disabled",
+            state="normal" if self.listener.ok else "disabled",
         )
-        self.btn_mic.pack(side="left", padx=5)
+        self.btn_mic.pack(side="left", padx=4)
 
-        # ── PANEL LATERAL (derecha, 30%) ─────
-        side = tk.Frame(main, bg=self.BG_PANEL, width=220)
-        side.pack(side="right", fill="y", padx=(8, 0))
-        side.pack_propagate(False)
+        # ── PANEL LATERAL (derecha) ───────────
+        right = tk.Frame(body, bg=self.BG2, width=210)
+        right.pack(side="right", fill="y", padx=(8,0))
+        right.pack_propagate(False)
 
-        tk.Label(
-            side, text="SISTEMA",
-            bg=self.BG_PANEL, fg=self.ACCENT,
-            font=("Courier", 10, "bold")
-        ).pack(pady=(10, 5))
+        tk.Label(right, text="SISTEMA", bg=self.BG2,
+                 fg=self.ACCENT, font=("Courier",10,"bold")
+                 ).pack(pady=(10,4))
 
-        # Estado del sistema
-        self.status_text = tk.Text(
-            side,
-            bg=self.BG_PANEL, fg=self.FG_DIM,
-            font=("Courier", 9),
+        self.status_box = tk.Text(
+            right, bg=self.BG2, fg=self.DIM,
+            font=self.FONT_SM,
             relief="flat", bd=0,
-            state="disabled", height=20,
+            state="disabled", height=16,
         )
-        self.status_text.pack(fill="both", expand=True, padx=8)
+        self.status_box.pack(fill="both", expand=True, padx=6)
 
-        # Separador
-        tk.Frame(side, bg=self.ACCENT, height=1).pack(fill="x", padx=8, pady=5)
+        tk.Frame(right, bg=self.ACCENT, height=1).pack(fill="x", padx=6, pady=4)
 
-        # Botones del sistema
-        for label, cmd in [
-            ("Estado",    self._show_status),
+        # Botones laterales
+        btns = [
+            ("Estado",       self._show_status),
             ("Λ Cosmología", self._show_lambda),
-            ("Memoria",   self._show_memory),
-            ("Limpiar",   self._clear_chat),
-        ]:
-            tk.Button(
-                side, text=label,
-                command=cmd,
-                bg=self.BG, fg=self.FG,
-                font=("Courier", 9),
-                relief="flat", cursor="hand2",
-                pady=4,
-            ).pack(fill="x", padx=8, pady=2)
+            ("Memoria",      self._show_memory),
+            ("Repo",         self._show_repo),
+            ("Limpiar",      self._clear),
+        ]
+        for label, cmd in btns:
+            tk.Button(right, text=label, command=cmd,
+                      bg=self.BG, fg=self.FG,
+                      font=self.FONT_SM,
+                      relief="flat", cursor="hand2", pady=4,
+                      ).pack(fill="x", padx=6, pady=2)
 
-        # Actualiza estado cada 3 segundos
-        self._update_status_panel()
+        # Actualiza panel cada 3s
+        self._tick()
 
-    # ── BIENVENIDA ───────────────────────────
-
+    # ── BIENVENIDA ────────────────────────────
     def _welcome(self):
-        from formulas.constants import BETA, EPSILON_OBSERVER, LAMBDA_UCF
         msg = (
             f"Sistema Omega activo.\n"
-            f"OS: {OS} {OS_VER[:20]}\n"
-            f"β = {BETA:.6f} | ε = {float(EPSILON_OBSERVER):.6f}\n"
-            f"Λ = {LAMBDA_UCF:.4e}\n"
-            f"{'Voz activa ✓' if self.listener.available else 'Sin micrófono'}\n"
-            f"Escribe o habla. Soy β.\n"
+            f"OS: {OS}\n"
+            f"β = {float(BETA):.6f}  "
+            f"ε = {float(EPSILON_OBSERVER):.5f}\n"
+            f"Λ = {LAMBDA_UCF:.3e}\n"
+            f"Todo el repositorio está indexado como memoria.\n"
+            f"Escribe, habla o usa los botones.\n"
         )
-        self._append_chat(msg, tag="system")
+        self._append(msg, "sys")
         self.speaker.speak("Sistema Omega activo. Soy el observador.")
 
-    # ── ENVIAR MENSAJE ───────────────────────
-
-    def _on_send(self, event=None):
+    # ── ENVIAR ────────────────────────────────
+    def _send(self, event=None):
         text = self.input_var.get().strip()
-        if not text:
-            return
+        if not text: return
+        self._cmd_hist.append(text)
+        self._hist_idx = len(self._cmd_hist)
         self.input_var.set("")
-        self._append_chat(f"→ {text}", tag="user")
+        self._append(f"→ {text}", "user")
+        threading.Thread(target=self._process, args=(text,), daemon=True).start()
 
-        # Procesa en hilo separado para no bloquear UI
-        threading.Thread(
-            target=self._process_and_reply,
-            args=(text,),
-            daemon=True
-        ).start()
-
-    def _process_and_reply(self, text: str):
-        """Procesa en background, actualiza UI en main thread."""
+    def _process(self, text):
         try:
-            if self.agent:
-                response = self.agent.process(text)
-            else:
-                response = f"[AGENTE NO DISPONIBLE] Input: {text}"
+            resp = self.agent.process(text) if self.agent else "[Sin agente]"
         except Exception as e:
-            response = f"[ERROR] {e}"
+            resp = f"[ERROR] {e}"
+        self.root.after(0, self._reply, resp)
 
-        # Actualiza UI desde el hilo principal
-        self.root.after(0, self._show_response, response)
-
-    def _show_response(self, response: str):
-        self._append_chat(f"Ω  {response}", tag="omega")
-        # Habla si la respuesta es corta
-        clean = response.replace("[VOZ]", "").replace("[WEB]", "").strip()
-        if len(clean) < 300:
+    def _reply(self, resp):
+        self._append(f"Ω  {resp}", "omega")
+        # Actualiza indicador de coherencia
+        if self.agent and self.agent.meta.coh_hist:
+            c = self.agent.meta.coh_hist[-1]
+            self.lbl_coh.config(text=f"C_ω = {c:.4f}")
+        # Habla si es corto
+        clean = resp[:200].replace("[VOZ]","").replace("[WEB]","").strip()
+        if len(clean) < 250:
             threading.Thread(
-                target=self.speaker.speak,
-                args=(clean[:200],),
-                daemon=True
+                target=self.speaker.speak, args=(clean,), daemon=True
             ).start()
 
-    # ── MICRÓFONO ────────────────────────────
-
-    def _on_mic(self):
-        if self.listening:
-            return
+    # ── MICRÓFONO ─────────────────────────────
+    def _mic(self):
+        if self.listening: return
         self.listening = True
-        self.btn_mic.config(bg=self.BETA_COLOR, text="🔴")
-        self._append_chat("Escuchando...", tag="system")
+        self.btn_mic.config(bg=self.RED, text="🔴")
+        self._append("Escuchando...", "sys")
         threading.Thread(target=self._listen_thread, daemon=True).start()
 
     def _listen_thread(self):
-        text = self.listener.listen_once(timeout=7)
-        self.root.after(0, self._on_listen_done, text)
+        text = self.listener.listen(timeout=7)
+        self.root.after(0, self._listen_done, text)
 
-    def _on_listen_done(self, text: str):
+    def _listen_done(self, text):
         self.listening = False
-        self.btn_mic.config(bg=self.BG_PANEL, text="🎤")
+        self.btn_mic.config(bg=self.BG2, text="🎤")
         if text:
             self.input_var.set(text)
-            self._on_send()
+            self._send()
         else:
-            self._append_chat("No escuché nada.", tag="system")
+            self._append("No escuché nada.", "sys")
 
-    # ── PANEL DE ESTADO ──────────────────────
-
-    def _update_status_panel(self):
-        """Actualiza el panel lateral cada 3 segundos."""
+    # ── PANEL LATERAL ─────────────────────────
+    def _tick(self):
         try:
-            from formulas.constants import BETA, EPSILON_OBSERVER
             lines = [
-                f"β = {BETA:.6f}",
-                f"ε = {float(EPSILON_OBSERVER):.6f}",
-                f"OS: {OS}",
+                f"β = {float(BETA):.6f}",
+                f"ε = {float(EPSILON_OBSERVER):.5f}",
+                f"Λ = {LAMBDA_UCF:.2e}",
+                "─────────────",
             ]
             if self.agent:
                 st = self.agent.meta.status()
+                m  = self.agent.memory
                 lines += [
-                    f"─────────────",
-                    f"Acciones: {st['actions']}",
-                    f"C_ω avg: {st['avg_coherence']:.4f}",
-                    f"Memoria: {self.agent.memory.size()}",
-                    f"─────────────",
-                    f"Sesión:",
-                    f"{st['session_duration']}",
+                    f"Acc: {st['acciones']}",
+                    f"Coh: {st['coherencia_avg']}",
+                    f"Mem: {m.size}",
+                    f"Idx: {m.index_size}",
+                    f"Fml: {len(FORMULAS)}",
+                    "─────────────",
+                    f"{st['sesion']}",
                 ]
-            self._update_text_widget(self.status_text, "\n".join(lines))
+            self._update_text(self.status_box, "\n".join(lines))
         except Exception:
             pass
-        # Repite cada 3 segundos
-        self.root.after(3000, self._update_status_panel)
+        self.root.after(3000, self._tick)
 
     def _show_status(self):
-        if not self.agent:
-            return
-        st = self.agent.meta.status()
-        self._append_chat(
-            f"Estado:\n" +
-            "\n".join(f"  {k}: {v}" for k, v in st.items()),
-            tag="system"
-        )
+        if not self.agent: return
+        self._append(self.agent.process("estado"), "beta")
 
     def _show_lambda(self):
-        try:
-            from formulas.cosmology import cosmology_report
-            r = cosmology_report()
-            msg = (
-                f"Λ_UIS  = {r['lambda_ucf']:.6e}\n"
-                f"Λ_obs  = 2.888e-122\n"
-                f"Error  = {r['lambda_error_pct']:.4f}%\n"
-                f"Exp    = π/β + βΦ² = 84.920\n"
-                f"Mejor α⁻¹: {r['alpha_em_best']} = "
-                f"{r['alpha_em_best_val']:.3f} "
-                f"({r['alpha_em_best_err']:.4f}%)"
-            )
-            self._append_chat(msg, tag="beta")
-        except Exception as e:
-            self._append_chat(f"[ERROR] {e}", tag="error")
+        if not self.agent: return
+        self._append(self.agent.process("calcula lambda"), "beta")
 
     def _show_memory(self):
-        if not self.agent:
-            return
-        mem = self.agent.memory
-        entries = list(mem.mem.items())[-5:]  # últimas 5
-        lines = [f"Memoria ({mem.size()} entradas):"]
-        for k, v in entries:
-            val = v.get("value", v) if isinstance(v, dict) else v
-            lines.append(f"  {k[:30]}: {str(val)[:50]}")
-        self._append_chat("\n".join(lines), tag="system")
+        if not self.agent: return
+        m = self.agent.memory
+        items = list(m._mem.items())[-5:]
+        lines = [f"Memoria ({m.size} entradas):"]
+        for k, v in items:
+            val = v.get("value","") if isinstance(v,dict) else v
+            lines.append(f"  {k[:28]}: {str(val)[:50]}")
+        self._append("\n".join(lines), "sys")
 
-    def _clear_chat(self):
-        self.chat_area.config(state="normal")
-        self.chat_area.delete("1.0", tk.END)
-        self.chat_area.config(state="disabled")
+    def _show_repo(self):
+        if not self.agent: return
+        self._append(self.agent.process("qué tienes"), "sys")
 
-    # ── HISTORIAL DE COMANDOS ─────────────────
+    def _clear(self):
+        self.chat.config(state="normal")
+        self.chat.delete("1.0", tk.END)
+        self.chat.config(state="disabled")
 
-    def _history_up(self, event=None):
-        """Flecha arriba recupera último comando."""
-        if self.agent and self.agent.memory.size() > 0:
-            entries = [
-                k for k in self.agent.memory.mem
-                if k.startswith("interaction:")
-            ]
-            if entries:
-                last = self.agent.memory.recall(entries[-1])
-                if isinstance(last, dict):
-                    self.input_var.set(last.get("input", ""))
+    # ── HISTORIAL ─────────────────────────────
+    def _hist_up(self, e=None):
+        if not self._cmd_hist: return
+        self._hist_idx = max(0, self._hist_idx-1)
+        self.input_var.set(self._cmd_hist[self._hist_idx])
 
-    # ── HELPERS UI ───────────────────────────
+    def _hist_down(self, e=None):
+        if not self._cmd_hist: return
+        self._hist_idx = min(len(self._cmd_hist), self._hist_idx+1)
+        val = self._cmd_hist[self._hist_idx] if self._hist_idx < len(self._cmd_hist) else ""
+        self.input_var.set(val)
 
-    def _append_chat(self, text: str, tag: str = "omega"):
-        self.chat_area.config(state="normal")
-        self.chat_area.insert(tk.END, f"{text}\n\n", tag)
-        self.chat_area.see(tk.END)
-        self.chat_area.config(state="disabled")
+    # ── HELPERS ───────────────────────────────
+    def _append(self, text, tag="omega"):
+        self.chat.config(state="normal")
+        self.chat.insert(tk.END, f"{text}\n\n", tag)
+        self.chat.see(tk.END)
+        self.chat.config(state="disabled")
 
-    def _update_text_widget(self, widget, text: str):
+    def _update_text(self, widget, text):
         widget.config(state="normal")
         widget.delete("1.0", tk.END)
         widget.insert("1.0", text)
         widget.config(state="disabled")
 
-    def _on_close(self):
+    def _close(self):
         if self.agent:
             self.agent.memory.remember("last_session", {
-                "closed": __import__("datetime").datetime.now().isoformat(),
-                "actions": self.agent.meta.action_count,
+                "ts": __import__("datetime").datetime.now().isoformat(),
+                "actions": self.agent.meta.actions,
             })
         self.speaker.speak("Hasta luego.")
         self.root.destroy()
 
-    # ── FALLBACK SIN TKINTER ─────────────────
-
-    def _run_fallback(self):
-        """Si no hay tkinter, usa terminal."""
-        print("[UI] tkinter no disponible. Modo terminal.")
+    def _fallback(self):
         if AGENT_OK:
-            agent = OmegaAgent()
-            agent.run(mode="text")
-
-    # ── ARRANCAR ─────────────────────────────
+            OmegaAgent().run(mode="text")
 
     def run(self):
         if HAS_TK:
             self.root.mainloop()
         else:
-            self._run_fallback()
+            self._fallback()
 
-
-# ══════════════════════════════════════════════
-# PUNTO DE ENTRADA
-# ══════════════════════════════════════════════
 
 if __name__ == "__main__":
-    ui = OmegaUI()
-    ui.run()
+    OmegaUI().run()

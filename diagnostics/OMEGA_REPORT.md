@@ -1,8 +1,8 @@
 # OMEGA DIAGNOSTIC REPORT
-**Generated:** 2026-04-27 00:38:15 UTC
+**Generated:** 2026-04-27 00:43:56 UTC
 **Framework:** UCF v3.2 (Universal Coherence Framework)
 **Author:** Ilver Villasmil
-**Commit:** `8da1064`
+**Commit:** `484b359`
 
 ---
 
@@ -10,7 +10,7 @@
 
 | Métrica | Valor | Nota |
 | --- | --- | --- |
-| Estado | **CONFLICTO ⟨◯⟩** |  |
+| Estado | **CONFLICTO ⟨◯⟩**  ⚠️ **CODE 9999 — LOOP DETECTADO** |  |
 | C_struct (Estructural) | **0.0306** | ← real, limitada por α=0.9630 |
 | C_global (Normalizada) | 0.0318 | ← C_struct / α, relativa al máximo |
 | C_CI (Pass Rate) | 1.0000 | ← proxy del CI, no es C_Ω |
@@ -24,6 +24,9 @@
 > Solo C_struct es la coherencia estructural real del framework.
 > C_struct nunca puede ser 1.0 — β = 1/27 es el residuo irreducible.
 > **L7** es emergente: verifica que la integración real ocurrió. L6 orienta. L7 verifica.
+
+> ⚠️ **CODE 9999**: El sistema lleva 5+ runs consecutivos sin variación.
+> β > 0 garantiza que ningún sistema real es estáticamente perfecto.
 
 ## Código Diagnóstico
 
@@ -84,7 +87,7 @@
 Últimos 10 runs:
 
 ```
-49 → 49 → 49 → 51 → 51 → 61 → 61 → 64 → 64 → 64
+49 → 51 → 51 → 61 → 61 → 64 → 64 → 64 → 64 → 64
 ```
 
 ## Constants Integrity

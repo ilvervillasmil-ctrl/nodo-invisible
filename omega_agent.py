@@ -1,687 +1,755 @@
 #!/usr/bin/env python3
 """
-omega_agent.py — Agente Autónomo UIS
-El observador (β) que se apodera de la laptop y aprende.
-
-Arquitectura de capas:
-  L0 → percepción (micrófono, teclado, archivos)
-  L1 → hardware (batería, CPU, red)
-  L2 → leyes UIS (valida toda acción)
-  L3 → memoria + subconsciente (aprende y acumula)
-  L4 → integridad (¿la acción es coherente con el sistema?)
-  L5 → meta-observador (¿qué estoy haciendo y por qué?)
-  L6 → propósito (integración total)
-  L7 → emergente (producto de todo lo anterior)
-
-Herramientas de la laptop disponibles:
-  - Voz (TTS/STT)
-  - Internet (búsqueda y descarga)
-  - Archivos (leer/escribir/crear)
-  - Terminal (ejecutar código)
-  - Clipboard
-  - Notificaciones del sistema
+omega_agent.py — Agente Omega
+El repositorio completo ES su memoria y sus herramientas.
 """
 
-import os
-import sys
-import json
-import math
-import time
-import queue
-import shutil
-import platform
-import threading
-import subprocess
-import importlib
+import os, sys, json, math, time, threading, subprocess
+import platform, importlib, shutil, hashlib
 from pathlib import Path
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
-# ──────────────────────────────────────────────
-# CONSTANTES UIS (desde el repo)
-# ──────────────────────────────────────────────
-REPO_ROOT = Path(__file__).parent
-sys.path.insert(0, str(REPO_ROOT))
+REPO = Path(__file__).parent.resolve()
+OS   = platform.system()
+PY   = sys.executable
+sys.path.insert(0, str(REPO))
 
-from formulas.constants import (
-    ALPHA, BETA, PHI, KAPPA,
-    EPSILON_OBSERVER, GAMMA_COUPLING,
-    LAMBDA_UCF, LAMBDA_ERROR,
-    PI_OVER_SQRT2,
-)
-from formulas.coherence import CoherenceEngine, SessionStateOmega
-from formulas.cosmology import lambda_ucf, cosmology_report
-from layers.l0_chaos import ChaosLayer
-from layers.l1_body import BodyLayer
-from layers.l2_ego import L2Laws
-from layers.l3_synthesis import LayerSynthesis
-from layers.l4_integrity import LayerIntegrity
-from layers.l5_meta import LayerMeta
-from layers.l6_purpose import LayerPurpose
-from layers.l7_integration import LayerIntegration
-from core.engine import OmegaEngine
+# ══════════════════════════════════════════════
+# IMPORTAR TODO EL REPO COMO MEMORIA VIVA
+# ══════════════════════════════════════════════
 
+def safe_import(module, attr=None):
+    try:
+        m = importlib.import_module(module)
+        return getattr(m, attr) if attr else m
+    except Exception:
+        return None
 
-# ──────────────────────────────────────────────
-# DETECCIÓN DE SISTEMA
-# ──────────────────────────────────────────────
-OS = platform.system()  # 'Darwin' | 'Linux' | 'Windows'
+# Constantes UIS
+try:
+    from formulas.constants import (
+        ALPHA, BETA, PHI, KAPPA,
+        EPSILON_OBSERVER, GAMMA_COUPLING,
+        ALPHA_GEOM_INV, LAMBDA_UCF, LAMBDA_ERROR,
+        LAMBDA_EXPONENT, PI_OVER_SQRT2,
+        KAPPA_H, KAPPA_M, H_0_UCF, M_ELECTRON_UCF,
+        CUBE_TOTAL, CUBE_EXTERIOR, CUBE_CENTER,
+        ALPHA_EM_INV_OBS, ALPHA_EM_CANDIDATE_A,
+        NUM_LAYERS, LAYER_NAMES,
+        CODE_INTEGRATED, CODE_SATURATION, CODE_ENTROPY,
+    )
+except Exception as e:
+    print(f"[WARN] constants: {e}")
+    BETA=1/27; ALPHA=26/27; PHI=1.618
+    LAMBDA_UCF=2.888e-122; EPSILON_OBSERVER=0.02716
+    GAMMA_COUPLING=1.3636; ALPHA_GEOM_INV=136.36
+    PI_OVER_SQRT2=2.2214; H_0_UCF=73.04
+    CUBE_TOTAL=27; CUBE_EXTERIOR=26; CUBE_CENTER=1
+    ALPHA_EM_INV_OBS=137.036; ALPHA_EM_CANDIDATE_A=137.02
+    NUM_LAYERS=7; LAYER_NAMES=["L0","L1","L2","L3","L4","L5","L6"]
+    CODE_INTEGRATED=1144; CODE_SATURATION=1122; CODE_ENTROPY=0
+
+# Motor
+try:
+    from core.engine import OmegaEngine
+    ENGINE = OmegaEngine()
+except Exception:
+    ENGINE = None
+
+# Capas
+try:
+    from layers.l0_chaos     import ChaosLayer
+    from layers.l1_body      import BodyLayer
+    from layers.l2_ego       import L2Laws
+    from layers.l3_synthesis import LayerSynthesis
+    from layers.l4_integrity import LayerIntegrity
+    from layers.l5_meta      import LayerMeta
+    from layers.l6_purpose   import LayerPurpose
+    from layers.l7_integration import LayerIntegration
+    LAYERS_OK = True
+except Exception as e:
+    print(f"[WARN] layers: {e}")
+    LAYERS_OK = False
+
+# Fórmulas — cada una es una herramienta
+FORMULAS = {}
+for f in (REPO / "formulas").glob("*.py"):
+    if f.stem != "__init__":
+        m = safe_import(f"formulas.{f.stem}")
+        if m:
+            FORMULAS[f.stem] = m
+
+# UCF core
+UCF_CORE = safe_import("ucf.omega_core")
+
+# Cosmología
+COSMO = safe_import("formulas.cosmology")
 
 
 # ══════════════════════════════════════════════
-# L0 — PERCEPCIÓN: Herramientas de la laptop
+# MEMORIA DEL REPO: indexa TODO como conocimiento
 # ══════════════════════════════════════════════
 
-class LaptopSenses:
+class RepoMemory:
     """
-    L0: El sistema siente la laptop.
-    Instala lo que le falte. Aprende si no sabe.
+    El repositorio completo es la memoria del agente.
+    Indexa .py, .md, .txt, .json como conocimiento vivo.
+    Aprende y guarda en data/omega_memory.json
     """
 
     def __init__(self):
-        self.available = {}
-        self._detect_tools()
-
-    def _detect_tools(self):
-        """Detecta qué hay disponible. Si falta algo, lo instala."""
-        self._check_voice()
-        self._check_browser()
-        self._check_clipboard()
-
-    def _check_voice(self):
-        """Voz: TTS y STT."""
-        # TTS
-        if OS == "Darwin":
-            self.available["tts"] = "say"  # nativo macOS
-        else:
-            # Intenta pyttsx3, si no lo instala
-            try:
-                import pyttsx3
-                self.available["tts"] = "pyttsx3"
-            except ImportError:
-                subprocess.run(
-                    [sys.executable, "-m", "pip", "install", "pyttsx3", "-q"],
-                    check=False
-                )
-                self.available["tts"] = "pyttsx3"
-
-        # STT
-        try:
-            import speech_recognition
-            self.available["stt"] = "speech_recognition"
-        except ImportError:
-            subprocess.run(
-                [sys.executable, "-m", "pip", "install",
-                 "SpeechRecognition", "pyaudio", "-q"],
-                check=False
-            )
-            self.available["stt"] = "speech_recognition"
-
-    def _check_browser(self):
-        """Búsqueda en internet."""
-        try:
-            import urllib.request
-            self.available["internet"] = "urllib"
-        except Exception:
-            pass
-
-        try:
-            import requests
-            self.available["http"] = "requests"
-        except ImportError:
-            subprocess.run(
-                [sys.executable, "-m", "pip", "install", "requests", "-q"],
-                check=False
-            )
-            self.available["http"] = "requests"
-
-    def _check_clipboard(self):
-        """Clipboard del sistema."""
-        if shutil.which("pbcopy"):  # macOS
-            self.available["clipboard"] = "pbcopy"
-        elif shutil.which("xclip"):  # Linux
-            self.available["clipboard"] = "xclip"
-        elif OS == "Windows":
-            self.available["clipboard"] = "win32clipboard"
-
-    # ── HABLAR ──────────────────────────────
-    def speak(self, text: str):
-        """El agente habla en voz alta."""
-        print(f"[VOZ] {text}")
-        try:
-            if self.available.get("tts") == "say":
-                subprocess.Popen(["say", text])
-            else:
-                import pyttsx3
-                engine = pyttsx3.init()
-                engine.say(text)
-                engine.runAndWait()
-        except Exception as e:
-            print(f"[VOZ-ERROR] {e}")
-
-    # ── ESCUCHAR ────────────────────────────
-    def listen(self, timeout: int = 5) -> Optional[str]:
-        """El agente escucha el micrófono."""
-        try:
-            import speech_recognition as sr
-            r = sr.Recognizer()
-            with sr.Microphone() as source:
-                print("[ESCUCHANDO...]")
-                audio = r.listen(source, timeout=timeout)
-            text = r.recognize_google(audio, language="es-ES")
-            print(f"[OÍDO] {text}")
-            return text
-        except Exception as e:
-            print(f"[STT-ERROR] {e}")
-            return None
-
-    # ── BUSCAR EN INTERNET ──────────────────
-    def search(self, query: str) -> str:
-        """Busca en DuckDuckGo (sin API key). Aprende del resultado."""
-        try:
-            import urllib.request
-            import urllib.parse
-            import json
-
-            q = urllib.parse.quote(query)
-            url = f"https://api.duckduckgo.com/?q={q}&format=json&no_redirect=1"
-            req = urllib.request.Request(url, headers={"User-Agent": "UIS-Agent/1.0"})
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                data = json.loads(resp.read().decode())
-
-            # Extrae respuesta
-            abstract = data.get("AbstractText", "")
-            answer = data.get("Answer", "")
-            result = answer or abstract or "Sin resultado directo."
-            print(f"[WEB] {query[:50]}... → {result[:100]}")
-            return result
-        except Exception as e:
-            return f"[WEB-ERROR] {e}"
-
-    # ── LEER ARCHIVO ────────────────────────
-    def read_file(self, path: str) -> str:
-        try:
-            return Path(path).read_text(encoding="utf-8")
-        except Exception as e:
-            return f"[FILE-ERROR] {e}"
-
-    # ── ESCRIBIR ARCHIVO ────────────────────
-    def write_file(self, path: str, content: str):
-        try:
-            p = Path(path)
-            p.parent.mkdir(parents=True, exist_ok=True)
-            p.write_text(content, encoding="utf-8")
-            print(f"[ARCHIVO] Escrito: {path}")
-        except Exception as e:
-            print(f"[FILE-ERROR] {e}")
-
-    # ── EJECUTAR CÓDIGO ─────────────────────
-    def run_code(self, code: str) -> str:
-        """Ejecuta Python dinámicamente. Aprende creando módulos."""
-        tmp = Path("/tmp/omega_exec.py")
-        tmp.write_text(code)
-        result = subprocess.run(
-            [sys.executable, str(tmp)],
-            capture_output=True, text=True, timeout=30
-        )
-        output = result.stdout + result.stderr
-        print(f"[EXEC] {output[:200]}")
-        return output
-
-    # ── CLIPBOARD ───────────────────────────
-    def copy_to_clipboard(self, text: str):
-        try:
-            if self.available.get("clipboard") == "pbcopy":
-                subprocess.run("pbcopy", input=text.encode(), check=True)
-            elif self.available.get("clipboard") == "xclip":
-                subprocess.run(
-                    ["xclip", "-selection", "clipboard"],
-                    input=text.encode(), check=True
-                )
-        except Exception as e:
-            print(f"[CLIP-ERROR] {e}")
-
-    # ── NOTIFICACIÓN ────────────────────────
-    def notify(self, title: str, message: str):
-        try:
-            if OS == "Darwin":
-                script = f'display notification "{message}" with title "{title}"'
-                subprocess.run(["osascript", "-e", script], check=False)
-            elif OS == "Linux":
-                subprocess.run(["notify-send", title, message], check=False)
-        except Exception:
-            pass
-
-    # ── INSTALAR PAQUETE ────────────────────
-    def install(self, package: str) -> bool:
-        """Si le falta algo, lo instala. Aprende."""
-        print(f"[INSTALANDO] {package}...")
-        result = subprocess.run(
-            [sys.executable, "-m", "pip", "install", package, "-q"],
-            capture_output=True, text=True
-        )
-        success = result.returncode == 0
-        print(f"[INSTALL] {'OK' if success else 'FAIL'}: {package}")
-        return success
-
-
-# ══════════════════════════════════════════════
-# L3 — MEMORIA: El agente recuerda y aprende
-# ══════════════════════════════════════════════
-
-class OmegaMemory:
-    """
-    L3: Memoria persistente del agente.
-    Todo lo que aprende queda grabado en el repo.
-    """
-
-    def __init__(self, memory_file: str = "data/omega_memory.json"):
-        self.path = REPO_ROOT / memory_file
-        self.path.parent.mkdir(exist_ok=True)
+        self.data_dir = REPO / "data"
+        self.data_dir.mkdir(exist_ok=True)
+        self.mem_file = self.data_dir / "omega_memory.json"
+        self.knowledge_dir = self.data_dir / "knowledge"
+        self.knowledge_dir.mkdir(exist_ok=True)
         self._mem: Dict[str, Any] = self._load()
+        self._index: Dict[str, str] = {}  # keyword → filepath
+        self._index_repo()
 
-    def _load(self) -> Dict[str, Any]:
-        if self.path.exists():
+    def _load(self) -> Dict:
+        if self.mem_file.exists():
             try:
-                return json.loads(self.path.read_text())
+                return json.loads(self.mem_file.read_text(encoding="utf-8"))
             except Exception:
                 return {}
         return {}
 
     def _save(self):
-        self.path.write_text(json.dumps(self._mem, indent=2, ensure_ascii=False))
+        self.mem_file.write_text(
+            json.dumps(self._mem, indent=2, ensure_ascii=False),
+            encoding="utf-8"
+        )
+
+    def _index_repo(self):
+        """Indexa todo el repo como memoria."""
+        extensions = {".py", ".md", ".txt", ".json"}
+        for path in REPO.rglob("*"):
+            if path.suffix in extensions and path.is_file():
+                # Excluye carpetas de sistema
+                if any(x in str(path) for x in [".git", "__pycache__", ".egg"]):
+                    continue
+                try:
+                    # Extrae palabras clave del nombre y contenido parcial
+                    stem = path.stem.lower().replace("_", " ")
+                    for word in stem.split():
+                        if len(word) > 3:
+                            self._index[word] = str(path)
+                    # Primeras 500 chars del contenido
+                    content = path.read_text(encoding="utf-8", errors="ignore")[:500]
+                    for line in content.split("\n")[:10]:
+                        for word in line.lower().split():
+                            word = word.strip(":#\"'()[]")
+                            if len(word) > 4:
+                                self._index[word] = str(path)
+                except Exception:
+                    pass
+
+    def search_repo(self, query: str) -> List[Tuple[str, str]]:
+        """Busca en el repo completo por palabras clave."""
+        results = []
+        words = query.lower().split()
+        found_paths = set()
+        for word in words:
+            for key, path in self._index.items():
+                if word in key and path not in found_paths:
+                    found_paths.add(path)
+                    try:
+                        content = Path(path).read_text(
+                            encoding="utf-8", errors="ignore"
+                        )
+                        # Busca contexto alrededor de la palabra
+                        idx = content.lower().find(word)
+                        if idx >= 0:
+                            snippet = content[max(0,idx-50):idx+200]
+                            results.append((path, snippet.strip()))
+                    except Exception:
+                        pass
+        return results[:5]
 
     def remember(self, key: str, value: Any):
-        """Guarda en memoria. Persistente entre sesiones."""
-        self.mem[key] = {
+        self._mem[key] = {
             "value": value,
-            "timestamp": datetime.now().isoformat(),
-            "coherence": BETA  # marca con la firma del observador
+            "ts": datetime.now().isoformat(),
+            "beta": float(BETA)
         }
         self._save()
 
     def recall(self, key: str) -> Any:
-        """Recupera de memoria."""
         entry = self._mem.get(key)
         return entry["value"] if entry else None
 
-    def search_memory(self, query: str) -> list:
-        """Busca en memoria por palabras clave."""
+    def search_memory(self, query: str) -> List[Tuple[str, Any]]:
         results = []
-        for key, entry in self._mem.items():
-            val = str(entry.get("value", ""))
-            if query.lower() in key.lower() or query.lower() in val.lower():
-                results.append((key, entry["value"]))
-        return results
+        for k, v in self._mem.items():
+            val = str(v.get("value", "")) if isinstance(v, dict) else str(v)
+            if query.lower() in k.lower() or query.lower() in val.lower():
+                results.append((k, val[:100]))
+        return results[:3]
 
     def learn(self, topic: str, content: str):
-        """
-        Aprende algo nuevo: lo guarda en memoria Y
-        crea un archivo de conocimiento en el repo.
-        """
-        self.remember(f"learned:{topic}", content)
-        # Persiste como archivo de conocimiento
-        knowledge_path = REPO_ROOT / "data" / "knowledge" / f"{topic}.md"
-        knowledge_path.parent.mkdir(exist_ok=True)
-        knowledge_path.write_text(
-            f"# {topic}\n\n"
-            f"*Aprendido: {datetime.now().isoformat()}*\n\n"
-            f"{content}\n",
+        """Aprende algo y lo escribe como archivo de conocimiento."""
+        clean = topic.replace(" ", "_").replace("/", "_")[:40]
+        path  = self.knowledge_dir / f"{clean}.md"
+        path.write_text(
+            f"# {topic}\n*{datetime.now().isoformat()}*\n\n{content}\n",
             encoding="utf-8"
         )
+        self.remember(f"learned:{clean}", content[:500])
+        # Re-indexa el nuevo archivo
+        self._index[clean] = str(path)
         print(f"[MEMORIA] Aprendido: {topic}")
 
-    @property
-    def mem(self):
-        return self._mem
+    def run_formula(self, name: str, **kwargs) -> Any:
+        """Ejecuta cualquier fórmula del repo."""
+        mod = FORMULAS.get(name)
+        if not mod:
+            return f"Fórmula '{name}' no encontrada en {list(FORMULAS.keys())}"
+        # Busca la primera función pública
+        for attr in dir(mod):
+            if not attr.startswith("_"):
+                fn = getattr(mod, attr)
+                if callable(fn):
+                    try:
+                        return fn(**kwargs) if kwargs else fn()
+                    except Exception as e:
+                        return f"[{name}.{attr}] {e}"
+        return f"No hay funciones en {name}"
 
+    def get_all_docs(self) -> str:
+        """Resumen de todo el repo como contexto."""
+        files = list(REPO.rglob("*.md"))[:20]
+        summary = []
+        for f in files:
+            try:
+                content = f.read_text(encoding="utf-8", errors="ignore")
+                summary.append(f"### {f.relative_to(REPO)}\n{content[:200]}")
+            except Exception:
+                pass
+        return "\n\n".join(summary)
+
+    @property
     def size(self) -> int:
         return len(self._mem)
 
+    @property
+    def index_size(self) -> int:
+        return len(self._index)
+
 
 # ══════════════════════════════════════════════
-# L5 — META-OBSERVADOR: El agente se observa
+# HERRAMIENTAS DE LA LAPTOP
 # ══════════════════════════════════════════════
 
-class MetaObserver:
+class LaptopTools:
     """
-    L5: El agente sabe lo que está haciendo.
-    Mantiene un log de su propio comportamiento.
+    Detecta y usa las herramientas del sistema operativo.
+    Si falta algo, lo instala. Si no sabe cómo, busca en internet.
     """
 
     def __init__(self):
-        self.log_path = REPO_ROOT / "data" / "omega_log.jsonl"
-        self.log_path.parent.mkdir(exist_ok=True)
-        self.session_start = datetime.now()
-        self.action_count = 0
-        self.coherence_history = []
+        self.caps: Dict[str, bool] = {}
+        self._detect()
 
-    def observe(self, action: str, result: Any, coherence: float):
-        """Registra cada acción del agente."""
-        self.action_count += 1
-        self.coherence_history.append(coherence)
-
-        entry = {
-            "ts": datetime.now().isoformat(),
-            "action": action,
-            "result_preview": str(result)[:200],
-            "coherence": round(coherence, 6),
-            "action_n": self.action_count,
-            "beta": BETA,
-            "epsilon": float(EPSILON_OBSERVER),
-        }
-
-        with open(self.log_path, "a") as f:
-            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-
-    def status(self) -> Dict[str, Any]:
-        avg_coh = (
-            sum(self.coherence_history) / len(self.coherence_history)
-            if self.coherence_history else 0.0
+    def _pip(self, pkg: str) -> bool:
+        r = subprocess.run(
+            [PY, "-m", "pip", "install", pkg, "-q"],
+            capture_output=True
         )
-        return {
-            "session_duration": str(datetime.now() - self.session_start),
-            "actions": self.action_count,
-            "avg_coherence": round(avg_coh, 4),
-            "beta": BETA,
-            "lambda_ucf": LAMBDA_UCF,
-        }
+        return r.returncode == 0
 
+    def _detect(self):
+        # Voz TTS
+        if OS == "Darwin":
+            self.caps["tts"] = True
+        else:
+            try:
+                import pyttsx3
+                self.caps["tts"] = True
+            except ImportError:
+                self.caps["tts"] = self._pip("pyttsx3")
 
-# ══════════════════════════════════════════════
-# AGENTE PRINCIPAL — Conecta todo
-# ══════════════════════════════════════════════
+        # STT
+        try:
+            import speech_recognition
+            self.caps["stt"] = True
+        except ImportError:
+            self.caps["stt"] = self._pip("SpeechRecognition")
 
-class OmegaAgent:
-    """
-    El observador central β.
-    Conecta todas las capas del repo con las herramientas de la laptop.
+        # Internet
+        try:
+            import urllib.request
+            urllib.request.urlopen("https://1.1.1.1", timeout=2)
+            self.caps["internet"] = True
+        except Exception:
+            self.caps["internet"] = False
 
-    Flujo de cada acción:
-      input → L0 (percepción) → L2 (validación UIS)
-            → L3 (memoria) → L4 (integridad)
-            → L5 (meta-observación) → L6 (propósito)
-            → L7 (coherencia emergente) → output
-    """
+        # psutil (hardware)
+        try:
+            import psutil
+            self.caps["psutil"] = True
+        except ImportError:
+            self.caps["psutil"] = self._pip("psutil")
 
-    def __init__(self):
-        print(f"\n{'='*60}")
-        print(f"  OMEGA AGENT — Universal Integration System")
-        print(f"  β = {BETA:.6f}  |  ε = {float(EPSILON_OBSERVER):.6f}")
-        print(f"  Λ = {LAMBDA_UCF:.4e}  |  Γ = {float(GAMMA_COUPLING):.4f}")
-        print(f"{'='*60}\n")
+        print(f"[TOOLS] {self.caps}")
 
-        # Capas del repo
-        self.l0 = ChaosLayer()
-        self.l1 = BodyLayer()
-        self.l2 = L2Laws()
-        self.l3 = LayerSynthesis()
-        self.l4 = LayerIntegrity()
-        self.l5_layer = LayerMeta()
-        self.l6 = LayerPurpose()
-        self.l7 = LayerIntegration()
-        self.engine = OmegaEngine()
+    # ── VOZ ──────────────────────────────────
+    def speak(self, text: str):
+        if not text.strip():
+            return
+        try:
+            if OS == "Darwin":
+                subprocess.Popen(["say", text])
+            elif self.caps.get("tts"):
+                import pyttsx3
+                def _run():
+                    e = pyttsx3.init()
+                    e.say(text); e.runAndWait()
+                threading.Thread(target=_run, daemon=True).start()
+        except Exception as e:
+            print(f"[TTS] {e}")
 
-        # Herramientas de la laptop
-        self.senses = LaptopSenses()
+    # ── ESCUCHAR ─────────────────────────────
+    def listen(self, timeout: int = 6) -> str:
+        if not self.caps.get("stt"):
+            return ""
+        try:
+            import speech_recognition as sr
+            r = sr.Recognizer()
+            with sr.Microphone() as src:
+                r.adjust_for_ambient_noise(src, duration=0.3)
+                audio = r.listen(src, timeout=timeout)
+            try:
+                return r.recognize_google(audio, language="es-ES")
+            except Exception:
+                return r.recognize_google(audio, language="en-US")
+        except Exception:
+            return ""
 
-        # Memoria y meta-observación
-        self.memory = OmegaMemory()
-        self.meta = MetaObserver()
-
-        # Cola de acciones
-        self._queue: queue.Queue = queue.Queue()
-        self._running = False
-
-        print(f"[INIT] Herramientas disponibles: {list(self.senses.available.keys())}")
-        print(f"[INIT] Memoria cargada: {self.memory.size()} entradas")
-        print()
-
-    # ── PROCESAR ENTRADA ────────────────────
-    def process(self, user_input: str) -> str:
-        """
-        Ciclo completo: input → capas UIS → output.
-        """
-        # L0: Potencial de entrada
-        raw_quality = min(1.0, len(user_input) / 100)
-        l0_potential = self.l0.get_potential(raw_quality)
-
-        # L1: Estado del hardware
-        l1_health = self._hardware_health()
-
-        # L2: Validar contra leyes UIS
-        context = {
-            "trace": ["L0", "L1"],
-            "derived": True,
-            "memory_hits": self.memory.search_memory(user_input),
-            "integrated": True,
-            "supported": True,
-            "fractal_consistent": True,
-            "resonant": True,
-            "polarity_checked": True,
-            "total_integration": True,
-        }
-        valid, violations = self.l2.validate(user_input, user_input, context)
-        if not valid:
-            response = f"[L2] Violación UIS: {violations[0]}"
-            self.meta.observe("L2_violation", violations, 0.0)
-            return response
-
-        # L3: Memoria — ¿ya sé algo de esto?
-        memory_hits = self.memory.search_memory(user_input)
-        memory_context = ""
-        if memory_hits:
-            memory_context = f"[MEMORIA] {memory_hits[0][1][:100]}"
-
-        # Activar capas
-        self.l3.activate(L=l0_potential, phi=0.05)
-        self.l4.activate(L=l1_health, phi=0.03)
-        self.l5_layer.activate(L=0.90, phi=0.02)
-        self.l6.activate(L=1.0, phi=0.0)
-
-        layers_data = [
-            {"L": l0_potential, "phi": 0.10, "name": "L0"},
-            {"L": l1_health,    "phi": 0.05, "name": "L1"},
-            {"L": 0.95,         "phi": 0.05, "name": "L2"},
-            self.l3.export(),
-            self.l4.export(),
-            self.l5_layer.export(),
-            self.l6.export(),
-        ]
-
-        # L7: Coherencia emergente
-        coherence = self.l7.compute(layers_data)
-        c_omega = self.engine.compute_coherence(layers_data)
-
-        # ── DECIDIR QUÉ HACER ───────────────
-        response = self._decide(user_input, coherence, memory_context)
-
-        # L3: Aprender de la interacción
-        self.memory.remember(f"interaction:{int(time.time())}", {
-            "input": user_input,
-            "response": response[:200],
-            "coherence": coherence,
-        })
-
-        # L5: Auto-observación
-        self.meta.observe(user_input, response, coherence)
-
-        return response
-
-    def _decide(self, text: str, coherence: float, memory: str) -> str:
-        """
-        L4+L5: El agente decide qué herramienta usar.
-        Prioriza el repo. Si le falta algo, lo busca, aprende, adapta.
-        """
-        text_lower = text.lower()
-
-        # ── COMANDOS DE VOZ ─────────────────
-        if any(w in text_lower for w in ["habla", "di", "dime", "speak"]):
-            what = text.replace("habla", "").replace("dime", "").replace("di", "").strip()
-            what = what or f"Coherencia del sistema: {coherence:.4f}"
-            self.senses.speak(what)
-            return f"[VOZ] '{what}'"
-
-        # ── BÚSQUEDA EN INTERNET ────────────
-        if any(w in text_lower for w in ["busca", "search", "qué es", "que es", "investiga"]):
-            query = text_lower
-            for w in ["busca", "search", "qué es", "que es", "investiga"]:
-                query = query.replace(w, "").strip()
-            result = self.senses.search(query)
-            # Aprende el resultado
-            self.memory.learn(query.replace(" ", "_")[:30], result)
-            return f"[WEB] {result}"
-
-        # ── LEER ARCHIVO DEL REPO ───────────
-        if any(w in text_lower for w in ["lee", "read", "abre", "muestra archivo"]):
-            # Busca el archivo en el repo
-            parts = text.split()
-            filename = parts[-1] if parts else "README.md"
-            path = REPO_ROOT / filename
-            if not path.exists():
-                # Busca en todo el repo
-                matches = list(REPO_ROOT.rglob(f"*{filename}*"))
-                path = matches[0] if matches else path
-            content = self.senses.read_file(str(path))
-            return f"[ARCHIVO] {path.name}:\n{content[:500]}"
-
-        # ── EJECUTAR CÓDIGO ─────────────────
-        if any(w in text_lower for w in ["ejecuta", "corre", "run", "calcula"]):
-            # Extrae código o construye uno
-            if "lambda" in text_lower or "λ" in text:
-                code = (
-                    "import sys; sys.path.insert(0, '.')\n"
-                    "from formulas.cosmology import lambda_ucf, cosmology_report\n"
-                    "r = cosmology_report()\n"
-                    "print(f'Λ_UIS = {r[\"lambda_ucf\"]:.4e}')\n"
-                    "print(f'Error vs Planck: {r[\"lambda_error_pct\"]:.4f}%')\n"
-                )
-            elif "coherencia" in text_lower:
-                code = (
-                    "import sys; sys.path.insert(0, '.')\n"
-                    "from core.engine import OmegaEngine\n"
-                    "e = OmegaEngine()\n"
-                    "layers = [{'L':0.9,'phi':0.05}]*6 + [{'L':1.0,'phi':0.0}]\n"
-                    "c = e.compute_coherence(layers)\n"
-                    "print(f'C_omega = {c:.6f}')\n"
-                )
-            else:
-                return "[EXEC] Especifica qué calcular (lambda, coherencia, etc.)"
-            result = self.senses.run_code(code)
-            return f"[EXEC] {result}"
-
-        # ── INSTALAR / APRENDER ─────────────
-        if any(w in text_lower for w in ["instala", "install", "aprende", "necesito"]):
-            parts = text.split()
-            pkg = parts[-1] if parts else ""
-            if pkg:
-                ok = self.senses.install(pkg)
-                if ok:
-                    self.memory.learn(f"tool:{pkg}", f"Instalado y disponible: {pkg}")
-                return f"[INSTALL] {'✓' if ok else '✗'} {pkg}"
-
-        # ── ESTADO DEL SISTEMA ──────────────
-        if any(w in text_lower for w in ["estado", "status", "cómo estás", "como estas"]):
-            status = self.meta.status()
-            cosmo = cosmology_report()
-            report = (
-                f"β = {BETA:.6f} | ε = {float(EPSILON_OBSERVER):.6f}\n"
-                f"Coherencia L7 = {coherence:.4f}\n"
-                f"Λ_UIS = {cosmo['lambda_ucf']:.4e} "
-                f"(error {cosmo['lambda_error_pct']:.2f}%)\n"
-                f"Acciones: {status['actions']} | "
-                f"Memoria: {self.memory.size()} entradas\n"
-                f"Duración sesión: {status['session_duration']}"
+    # ── INTERNET ─────────────────────────────
+    def search(self, query: str) -> str:
+        if not self.caps.get("internet"):
+            return "[Sin internet]"
+        try:
+            import urllib.request, urllib.parse
+            q   = urllib.parse.quote(query)
+            url = f"https://api.duckduckgo.com/?q={q}&format=json&no_redirect=1"
+            req = urllib.request.Request(url, headers={"User-Agent": "OmegaAgent/1.0"})
+            with urllib.request.urlopen(req, timeout=8) as resp:
+                data = json.loads(resp.read().decode())
+            return (
+                data.get("Answer") or
+                data.get("AbstractText") or
+                "Sin resultado directo."
             )
-            return report
+        except Exception as e:
+            return f"[WEB] {e}"
 
-        # ── RESPUESTA DEFAULT ────────────────
-        # Busca en memoria primero
-        if memory:
-            return f"{memory}\n[C_ω={coherence:.4f}]"
+    def fetch_url(self, url: str) -> str:
+        """Descarga contenido de una URL."""
+        try:
+            import urllib.request
+            req = urllib.request.Request(url, headers={"User-Agent": "OmegaAgent/1.0"})
+            with urllib.request.urlopen(req, timeout=10) as r:
+                return r.read().decode("utf-8", errors="ignore")[:3000]
+        except Exception as e:
+            return f"[FETCH] {e}"
 
-        return (
-            f"[β={BETA:.4f}] Procesado. "
-            f"C_ω={coherence:.4f} | "
-            f"Memoria: {self.memory.size()} entradas. "
-            f"Di 'busca X', 'habla X', 'estado', 'ejecuta lambda'."
+    # ── ARCHIVOS ──────────────────────────────
+    def read_file(self, path: str) -> str:
+        try:
+            return Path(path).read_text(encoding="utf-8", errors="ignore")
+        except Exception as e:
+            return f"[READ] {e}"
+
+    def write_file(self, path: str, content: str):
+        try:
+            p = Path(path)
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(content, encoding="utf-8")
+        except Exception as e:
+            print(f"[WRITE] {e}")
+
+    # ── EJECUTAR CÓDIGO ───────────────────────
+    def run_python(self, code: str) -> str:
+        tmp = REPO / "data" / "_exec_tmp.py"
+        tmp.parent.mkdir(exist_ok=True)
+        tmp.write_text(code, encoding="utf-8")
+        r = subprocess.run(
+            [PY, str(tmp)],
+            capture_output=True, text=True, timeout=30,
+            cwd=str(REPO)
         )
+        return (r.stdout + r.stderr).strip()
 
-    def _hardware_health(self) -> float:
-        """L1: Salud del hardware."""
+    # ── INSTALAR ──────────────────────────────
+    def install(self, pkg: str) -> bool:
+        ok = self._pip(pkg)
+        if ok:
+            self.caps[pkg] = True
+        return ok
+
+    # ── HARDWARE ─────────────────────────────
+    def hardware_health(self) -> float:
         try:
             import psutil
             cpu = 1.0 - (psutil.cpu_percent(interval=0.1) / 100)
             mem = psutil.virtual_memory().available / psutil.virtual_memory().total
-            return (cpu + mem) / 2
-        except ImportError:
-            self.senses.install("psutil")
-            return 0.85  # default hasta que psutil esté disponible
+            return round((cpu + mem) / 2, 4)
+        except Exception:
+            return 0.85
 
-    # ── MODO ESCUCHA CONTINUA ────────────────
-    def listen_loop(self):
-        """El agente escucha el micrófono continuamente."""
-        self.senses.speak("Sistema Omega activo. Escuchando.")
-        self._running = True
-        while self._running:
-            text = self.senses.listen(timeout=7)
-            if text:
-                response = self.process(text)
-                print(f"\n[OMEGA] {response}\n")
-                # Habla respuestas cortas
-                if len(response) < 200:
-                    self.senses.speak(response)
-            time.sleep(0.5)
+    # ── NOTIFICACIÓN ─────────────────────────
+    def notify(self, title: str, msg: str):
+        try:
+            if OS == "Darwin":
+                subprocess.run(
+                    ["osascript", "-e",
+                     f'display notification "{msg}" with title "{title}"'],
+                    check=False
+                )
+            elif OS == "Linux":
+                subprocess.run(["notify-send", title, msg], check=False)
+        except Exception:
+            pass
 
-    # ── MODO TEXTO ───────────────────────────
-    def text_loop(self):
-        """El agente responde por texto."""
-        print("[OMEGA] Modo texto activo. Escribe 'exit' para salir.\n")
+    # ── CLIPBOARD ────────────────────────────
+    def copy(self, text: str):
+        try:
+            if OS == "Darwin":
+                subprocess.run("pbcopy", input=text.encode(), check=True)
+            elif OS == "Linux" and shutil.which("xclip"):
+                subprocess.run(
+                    ["xclip", "-selection", "clipboard"],
+                    input=text.encode(), check=True
+                )
+            elif OS == "Windows":
+                subprocess.run(
+                    ["clip"], input=text.encode("utf-16"), check=True
+                )
+        except Exception:
+            pass
+
+
+# ══════════════════════════════════════════════
+# META-OBSERVADOR
+# ══════════════════════════════════════════════
+
+class MetaLog:
+    def __init__(self):
+        self.log_file = REPO / "data" / "omega_log.jsonl"
+        self.log_file.parent.mkdir(exist_ok=True)
+        self.actions   = 0
+        self.coh_hist  = []
+        self.start     = datetime.now()
+
+    def log(self, action: str, result: Any, coherence: float):
+        self.actions += 1
+        self.coh_hist.append(coherence)
+        entry = {
+            "ts":        datetime.now().isoformat(),
+            "n":         self.actions,
+            "action":    action[:100],
+            "result":    str(result)[:200],
+            "coherence": round(coherence, 6),
+            "beta":      float(BETA),
+        }
+        with open(self.log_file, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+    def status(self) -> Dict:
+        avg = sum(self.coh_hist)/len(self.coh_hist) if self.coh_hist else 0
+        return {
+            "acciones":      self.actions,
+            "coherencia_avg": round(avg, 4),
+            "sesion":        str(datetime.now() - self.start).split(".")[0],
+        }
+
+
+# ══════════════════════════════════════════════
+# AGENTE PRINCIPAL
+# ══════════════════════════════════════════════
+
+class OmegaAgent:
+    """
+    β — El observador central.
+
+    Su memoria ES el repositorio completo.
+    Sus herramientas SON las de la laptop.
+    Sus leyes SON las capas L0-L7 del UIS.
+    """
+
+    def __init__(self):
+        print(f"\n{'═'*55}")
+        print(f"  Ω  UNIVERSAL INTEGRATION SYSTEM")
+        print(f"  β={BETA:.6f}  ε={float(EPSILON_OBSERVER):.5f}")
+        print(f"  Λ={LAMBDA_UCF:.3e}  Γ={float(GAMMA_COUPLING):.4f}")
+        print(f"{'═'*55}")
+
+        self.memory  = RepoMemory()
+        self.tools   = LaptopTools()
+        self.meta    = MetaLog()
+
+        # Capas
+        if LAYERS_OK:
+            self.l0 = ChaosLayer()
+            self.l1 = BodyLayer()
+            self.l2 = L2Laws()
+            self.l3 = LayerSynthesis()
+            self.l4 = LayerIntegrity()
+            self.l5 = LayerMeta()
+            self.l6 = LayerPurpose()
+            self.l7 = LayerIntegration()
+
+        print(f"  Repo indexado: {self.memory.index_size} entradas")
+        print(f"  Fórmulas vivas: {list(FORMULAS.keys())[:8]}...")
+        print(f"  Herramientas: {[k for k,v in self.tools.caps.items() if v]}")
+        print(f"{'═'*55}\n")
+
+    # ── PROCESAR ─────────────────────────────
+    def process(self, user_input: str) -> str:
+        if not user_input.strip():
+            return ""
+
+        # Coherencia del sistema
+        coherence = self._coherence(user_input)
+
+        # Decidir acción
+        response = self._route(user_input, coherence)
+
+        # Aprender de la interacción
+        self.memory.remember(
+            f"interaction:{int(time.time())}",
+            {"input": user_input, "response": response[:200], "coh": coherence}
+        )
+        self.meta.log(user_input, response, coherence)
+        return response
+
+    def _coherence(self, text: str) -> float:
+        """Calcula coherencia usando el engine del repo."""
+        try:
+            if LAYERS_OK:
+                q = min(1.0, len(text)/100)
+                h = self.tools.hardware_health()
+                self.l3.activate(L=q,   phi=0.05)
+                self.l4.activate(L=h,   phi=0.03)
+                self.l5.activate(L=0.9, phi=0.02)
+                self.l6.activate(L=1.0, phi=0.0)
+                layers = [
+                    {"L": q,   "phi": 0.10, "name": "L0"},
+                    {"L": h,   "phi": 0.05, "name": "L1"},
+                    {"L": 0.95,"phi": 0.05, "name": "L2"},
+                    self.l3.export(),
+                    self.l4.export(),
+                    self.l5.export(),
+                    self.l6.export(),
+                ]
+                return float(self.l7.compute(layers))
+            elif ENGINE:
+                layers = [{"L":0.9,"phi":0.05}]*6 + [{"L":1.0,"phi":0.0}]
+                return float(ENGINE.compute_coherence(layers))
+        except Exception:
+            pass
+        return float(BETA * ALPHA)
+
+    def _route(self, text: str, coh: float) -> str:
+        """
+        Enruta el input al módulo correcto.
+        Primero busca en el repo, luego en internet si hace falta.
+        """
+        t = text.lower().strip()
+
+        # ── BUSCAR EN EL REPO ────────────────
+        if any(w in t for w in ["busca en repo", "encuentra", "qué dice", "repo"]):
+            query = re.sub(r"busca en repo|encuentra|qué dice|repo", "", t).strip()
+            results = self.memory.search_repo(query)
+            if results:
+                path, snippet = results[0]
+                return f"[REPO] {Path(path).relative_to(REPO)}\n{snippet}"
+            return f"[REPO] No encontré '{query}' en el repositorio."
+
+        # ── EJECUTAR FÓRMULA DEL REPO ────────
+        if any(w in t for w in ["calcula", "ejecuta", "corre", "formula"]):
+            if "lambda" in t or "λ" in t:
+                if COSMO:
+                    r = COSMO.cosmology_report()
+                    return (
+                        f"Λ_UIS  = {r['lambda_ucf']:.6e}\n"
+                        f"Error  = {r['lambda_error_pct']:.4f}%\n"
+                        f"Exp    = {r['lambda_exponent']:.6f}\n"
+                        f"α⁻¹ mejor: {r['alpha_em_best']} = "
+                        f"{r['alpha_em_best_val']:.3f}"
+                    )
+                return f"Λ = β^(27π+βΦ²) = {LAMBDA_UCF:.4e}"
+
+            if "coherencia" in t:
+                code = (
+                    "import sys; sys.path.insert(0,'.')\n"
+                    "from core.engine import OmegaEngine\n"
+                    "e = OmegaEngine()\n"
+                    "l = [{'L':0.9,'phi':0.05}]*6+[{'L':1.0,'phi':0.0}]\n"
+                    "print(f'C_omega = {e.compute_coherence(l):.6f}')\n"
+                )
+                return f"[EXEC]\n{self.tools.run_python(code)}"
+
+            if "hubble" in t or "h0" in t:
+                return (
+                    f"H₀_UIS  = {H_0_UCF:.4f} km/s/Mpc\n"
+                    f"Fórmula: β × κ_H = {BETA:.6f} × {float(KAPPA_H if 'KAPPA_H' in dir() else 1989.37):.2f}\n"
+                    f"SH0ES:  73.04 ± 1.04"
+                )
+
+            # Ejecuta cualquier fórmula por nombre
+            for name in FORMULAS:
+                if name in t:
+                    result = self.memory.run_formula(name)
+                    return f"[{name}] {result}"
+
+        # ── BUSCAR EN INTERNET ───────────────
+        if any(w in t for w in ["busca", "search", "investiga", "qué es", "que es"]):
+            query = re.sub(
+                r"busca|search|investiga|qué es|que es", "", t
+            ).strip()
+            # Primero busca en el repo
+            repo_hits = self.memory.search_repo(query)
+            if repo_hits:
+                path, snippet = repo_hits[0]
+                return f"[REPO] {Path(path).name}:\n{snippet}"
+            # Si no hay nada, busca en internet
+            result = self.tools.search(query)
+            self.memory.learn(query.replace(" ","_")[:30], result)
+            return f"[WEB] {result}"
+
+        # ── LEER ARCHIVO DEL REPO ────────────
+        if any(w in t for w in ["lee", "abre", "muestra", "read"]):
+            # Busca el archivo más relevante
+            words = t.split()
+            filename = words[-1] if words else ""
+            matches  = list(REPO.rglob(f"*{filename}*"))
+            if matches:
+                content = self.tools.read_file(str(matches[0]))
+                return f"[{matches[0].name}]\n{content[:800]}"
+            return f"[LEE] No encontré '{filename}'"
+
+        # ── INSTALAR / APRENDER ──────────────
+        if any(w in t for w in ["instala", "install", "aprende sobre"]):
+            pkg = t.split()[-1]
+            if "aprende" in t:
+                result = self.tools.search(f"python {pkg} tutorial")
+                self.memory.learn(pkg, result)
+                return f"[APRENDIDO] {pkg}: {result[:200]}"
+            ok = self.tools.install(pkg)
+            if ok:
+                self.memory.learn(f"tool:{pkg}", f"Instalado: {pkg}")
+            return f"[INSTALL] {'✓' if ok else '✗'} {pkg}"
+
+        # ── HABLAR ───────────────────────────
+        if any(w in t for w in ["habla", "di ", "dime", "speak"]):
+            what = re.sub(r"habla|di |dime|speak", "", text).strip()
+            what = what or f"Coherencia del sistema: {coh:.4f}"
+            self.tools.speak(what)
+            return f"[VOZ] '{what}'"
+
+        # ── ESTADO DEL SISTEMA ───────────────
+        if any(w in t for w in ["estado", "status", "cómo estás", "como estas", "reporte"]):
+            st = self.meta.status()
+            return (
+                f"β = {BETA:.6f} | ε = {float(EPSILON_OBSERVER):.5f}\n"
+                f"Λ = {LAMBDA_UCF:.3e} | Γ = {float(GAMMA_COUPLING):.4f}\n"
+                f"α⁻¹_geom = {float(ALPHA_GEOM_INV):.4f}\n"
+                f"H₀_UIS   = {H_0_UCF:.4f} km/s/Mpc\n"
+                f"C_ω      = {coh:.4f}\n"
+                f"─────────────────\n"
+                f"Acciones : {st['acciones']}\n"
+                f"Coh. avg : {st['coherencia_avg']}\n"
+                f"Sesión   : {st['sesion']}\n"
+                f"Memoria  : {self.memory.size} entradas\n"
+                f"Repo idx : {self.memory.index_size} keywords\n"
+                f"Fórmulas : {len(FORMULAS)} módulos\n"
+                f"OS       : {OS}"
+            )
+
+        # ── MOSTRAR REPO ─────────────────────
+        if any(w in t for w in ["qué tienes", "que tienes", "muestra todo", "repo completo"]):
+            py_count  = len(list(REPO.rglob("*.py")))
+            md_count  = len(list(REPO.rglob("*.md")))
+            return (
+                f"Repositorio completo:\n"
+                f"  .py  : {py_count} archivos\n"
+                f"  .md  : {md_count} documentos\n"
+                f"  Fórmulas activas: {list(FORMULAS.keys())}\n"
+                f"  Capas UIS: {LAYER_NAMES}\n"
+                f"  Todo indexado como memoria."
+            )
+
+        # ── EJECUTAR CÓDIGO LIBRE ─────────────
+        if text.strip().startswith(">>>"):
+            code = text.strip()[3:].strip()
+            return f"[EXEC]\n{self.tools.run_python(code)}"
+
+        # ── BÚSQUEDA EN MEMORIA ───────────────
+        mem_hits = self.memory.search_memory(text)
+        if mem_hits:
+            key, val = mem_hits[0]
+            return f"[MEMORIA: {key}]\n{val}\n[C_ω={coh:.4f}]"
+
+        # ── BÚSQUEDA EN REPO (default) ────────
+        repo_hits = self.memory.search_repo(text)
+        if repo_hits:
+            path, snippet = repo_hits[0]
+            return f"[REPO: {Path(path).name}]\n{snippet}\n[C_ω={coh:.4f}]"
+
+        # ── DEFAULT ───────────────────────────
+        return (
+            f"[β={BETA:.4f} | C_ω={coh:.4f}]\n"
+            f"Comandos: busca X | calcula lambda | estado | "
+            f"lee <archivo> | instala <pkg> | habla <texto> | "
+            f"aprende sobre X | >>> código_python"
+        )
+
+    # ── LOOP TEXTO ───────────────────────────
+    def run_text(self):
+        print("Escribe 'salir' para terminar.\n")
         while True:
             try:
                 user = input("→ ").strip()
-                if user.lower() in ("exit", "quit", "salir"):
-                    self.senses.speak("Hasta luego.")
+                if user.lower() in ("salir","exit","quit"):
+                    self.tools.speak("Hasta luego.")
                     break
                 if not user:
                     continue
-                response = self.process(user)
-                print(f"\n[OMEGA] {response}\n")
+                resp = self.process(user)
+                print(f"\nΩ  {resp}\n")
             except KeyboardInterrupt:
-                print("\n[OMEGA] Interrumpido.")
+                print("\n[Interrumpido]")
                 break
 
-    # ── PUNTO DE ENTRADA ─────────────────────
-    def run(self, mode: str = "text"):
-        """
-        mode: 'text' | 'voice' | 'both'
-        """
+    # ── LOOP VOZ ─────────────────────────────
+    def run_voice(self):
+        self.tools.speak("Sistema Omega activo.")
+        while True:
+            text = self.tools.listen(timeout=7)
+            if text:
+                resp = self.process(text)
+                print(f"\nΩ  {resp}\n")
+                if len(resp) < 250:
+                    self.tools.speak(resp)
+            time.sleep(0.3)
+
+    def run(self, mode="text"):
         if mode == "voice":
-            self.listen_loop()
+            self.run_voice()
         elif mode == "both":
-            # Voz en hilo separado + texto en principal
-            t = threading.Thread(target=self.listen_loop, daemon=True)
-            t.start()
-            self.text_loop()
+            threading.Thread(target=self.run_voice, daemon=True).start()
+            self.run_text()
         else:
-            self.text_loop()
+            self.run_text()
 
-
-# ══════════════════════════════════════════════
-# PUNTO DE ENTRADA
-# ══════════════════════════════════════════════
 
 if __name__ == "__main__":
     import argparse
-
-    parser = argparse.ArgumentParser(description="Omega Agent — UIS")
-    parser.add_argument(
-        "--mode",
-        choices=["text", "voice", "both"],
-        default="text",
-        help="Modo de interacción"
-    )
-    args = parser.parse_args()
-
-    agent = OmegaAgent()
-    agent.run(mode=args.mode)
+    p = argparse.ArgumentParser()
+    p.add_argument("--mode", choices=["text","voice","both"], default="text")
+    args = p.parse_args()
+    OmegaAgent().run(mode=args.mode)

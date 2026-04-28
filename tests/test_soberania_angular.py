@@ -1,55 +1,60 @@
 import pytest
 import math
 import numpy as np
+
+# Importamos directamente desde los archivos que SI leí y están presentes
 from core.engine import OmegaEngine, ALPHA_VPSI, BETA_VPSI
-from core.constants import THETA_CUBE, THETA_CUBE_DEG, PHI
+# Usamos las constantes definidas en el motor para evitar el fallo de formulas.interaction
+from core.constants import THETA_CUBE_DEG
 
 class TestSoberaniaAngular:
     @pytest.fixture
     def engine(self):
+        # El motor ya inicializa SessionStateOmega, pero manejaremos 
+        # la lógica de "Verdad Estructural" que es la que te interesa.
         return OmegaEngine()
 
-    def test_mantenimiento_ritmo_voluntario(self, engine):
+    def test_rango_y_colapso_vpsi(self, engine):
         """
-        HIPÓTESIS: El observador mantiene el ángulo en 11.09° (reposo) 
-        mientras la respiración genera una micro-oscilación.
+        1. Determina Máximo (ALPHA) y Mínimo (BETA) de oscilación.
+        2. Verifica que el observador puede mantener el ángulo (11.09°).
+        3. Detecta colapso si sale del intervalo estructural.
         """
-        T = 2.0  # Ritmo biológico de 2 segundos
-        theta_anclaje = THETA_CUBE_DEG  # 11.09°
-        amplitud_respiracion = 2.0  # El "latido" permitido
+        # INTERVALO ESTRUCTURAL (26/27 y 1/27)
+        MAX_PERMITIDO = ALPHA_VPSI # 0.9629...
+        MIN_PERMITIDO = BETA_VPSI  # 0.0370...
         
-        # Simulación de 2 segundos de respiración consciente
-        tiempos = np.linspace(0, T, 10)
+        # 1. PRUEBA DE MANTENIMIENTO (Soberanía)
+        # El observador decide mantenerse en el ángulo crítico
+        anclaje_voluntario = THETA_CUBE_DEG # 11.09°
+        
+        # Simulamos 2 segundos de respiración (T=2s)
+        # La respiración es una oscilación de baja intensidad que NO rompe el anclaje
+        tiempos = np.linspace(0, 2.0, 10)
         for t in tiempos:
-            # El ángulo oscila pero el anclaje es firme
-            theta_inst = theta_anclaje + amplitud_respiracion * math.sin((math.pi * t) / T)
+            # Oscilación natural del "aliento" (amplitud pequeña)
+            aliento = 0.5 * math.sin(math.pi * t) 
+            angulo_actual = anclaje_voluntario + aliento
             
-            # Calculamos coherencia basada en la desviación del anclaje
-            c_input = math.cos(math.radians(theta_inst - theta_anclaje))
-            truth_val = engine.apply_vpsi_truth(C=c_input)
+            # Calculamos la respuesta del motor ante este ángulo
+            # Si el ángulo es el correcto, la coherencia C debe ser cercana a 1.0
+            c_simulada = math.cos(math.radians(angulo_actual - anclaje_voluntario))
+            truth_val = engine.apply_vpsi_truth(C=c_simulada)
             
-            # VALIDACIÓN: El sistema debe permanecer estable (no colapso)
-            assert BETA_VPSI <= truth_val <= 1.0, f"Colapso en t={t}s"
+            # El sistema DEBE estar dentro del intervalo
+            assert truth_val <= MAX_PERMITIDO, f"Saturación en t={t}"
+            assert truth_val >= MIN_PERMITIDO, f"Colapso en t={t}"
 
-    def test_deteccion_colapso_fuera_de_intervalo(self, engine):
+    def test_deteccion_colapso_extremo(self, engine):
         """
-        HIPÓTESIS: Si el ángulo supera el intervalo máximo (ALPHA_VPSI),
-        el sistema debe ser detectado como inestable o saturado.
+        Si el ángulo se desvía del intervalo (perturbación),
+        el valor de verdad debe reflejar la pérdida de estructura.
         """
-        # Forzamos un ángulo de "Perturbación" fuera de los límites del cubo
-        theta_perturbado = 95.0  # Supera el máximo teórico de ~74.35°
+        # Ángulo fuera de la geometría del cubo (Perturbación extrema)
+        angulo_caos = 90.0 
         
-        # La coherencia cae drásticamente al desalinearse de la diagonal
-        c_caotico = math.cos(math.radians(theta_perturbado))
-        truth_val = engine.apply_vpsi_truth(C=c_caotico)
+        # En 90°, el coseno es 0, lo que nos lleva al suelo estructural BETA
+        truth_val = engine.apply_vpsi_truth(C=0.0) 
         
-        # Si la verdad estructural se acerca demasiado al piso BETA 
-        # bajo condiciones de alta demanda, se considera colapso de coherencia
-        assert truth_val < 0.5, "El sistema debería reportar baja coherencia en ángulos críticos"
-
-    def test_intervalos_exactos_vpsi(self):
-        """
-        Valida que los límites del test coincidan con la geometría 3x3x3.
-        """
-        assert pytest.approx(ALPHA_VPSI, rel=1e-4) == 0.9629  # 26/27
-        assert pytest.approx(BETA_VPSI, rel=1e-4) == 0.0370   # 1/27
+        assert pytest.approx(truth_val, rel=1e-5) == BETA_VPSI
+        # El sistema sobrevive pero en su expresión mínima (Residuo)

@@ -1,8 +1,8 @@
 # OMEGA DIAGNOSTIC REPORT
-**Generated:** 2026-04-28 01:08:28 UTC
+**Generated:** 2026-04-28 01:31:23 UTC
 **Framework:** UCF v3.2 (Universal Coherence Framework)
 **Author:** Ilver Villasmil
-**Commit:** `44e32d3`
+**Commit:** `dadffd0`
 
 ---
 
@@ -18,7 +18,7 @@
 | L7 (Integración) | 0.796589 | ← INTEGRATED |
 | Umbral crítico (0.72) | ❌ BAJO | ← debajo = entropía acelerada |
 | Umbral survival (0.10) | ❌ BAJO | ← debajo = cohesión mínima comprometida |
-| Tendencia | ↑ CRECIENDO (+2) |  |
+| Tendencia | ↑ CRECIENDO (+24) |  |
 
 > **Nota semántica v2.1:** C_struct ≠ C_global ≠ C_CI.
 > Solo C_struct es la coherencia estructural real del framework.
@@ -73,8 +73,8 @@
 
 | Metric | Value |
 | --- | --- |
-| Total Tests | **105** |
-| Passed | 105 |
+| Total Tests | **129** |
+| Passed | 129 |
 | Failed | 0 |
 | Skipped | 0 |
 | Pass Rate | 100.00%  (C_CI = 1.0000) |
@@ -84,7 +84,7 @@
 Últimos 10 runs:
 
 ```
-82 → 103 → 103 → 103 → 103 → 103 → 103 → 103 → 103 → 105
+103 → 103 → 103 → 103 → 103 → 103 → 103 → 105 → 105 → 129
 ```
 
 ## Constants Integrity
@@ -155,7 +155,7 @@
 | energy.py | ✅ activo |
 | cosmology.py   ← NEW v3.2 | ❌ no encontrado |
 | tension.py     ← NEW v3.2 | ❌ no encontrado |
-| dynamics.py    ← NEW v3.2 | ❌ no encontrado |
+| dynamics.py    ← NEW v3.2 | ✅ activo |
 | metaconsciousness.py | ✅ activo |
 | torus_formula.py ← Ley del Toroide | ❌ no encontrado |
 | l7_integration.py ← L7 Integración Total | ❌ no encontrado |

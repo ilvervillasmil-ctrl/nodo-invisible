@@ -1,8 +1,8 @@
 # OMEGA DIAGNOSTIC REPORT
-**Generated:** 2026-04-28 01:37:00 UTC
+**Generated:** 2026-04-28 01:45:40 UTC
 **Framework:** UCF v3.2 (Universal Coherence Framework)
 **Author:** Ilver Villasmil
-**Commit:** `eeb5856`
+**Commit:** `18d01f8`
 
 ---
 
@@ -11,14 +11,14 @@
 | Métrica | Valor | Nota |
 | --- | --- | --- |
 | Estado | **CONFLICTO ⟨◯⟩** |  |
-| C_struct (Estructural) | **0.0306** | ← real, limitada por α=0.9630 |
-| C_global (Normalizada) | 0.0318 | ← C_struct / α, relativa al máximo |
+| C_struct (Estructural) | **0.5983** | ← real, limitada por α=0.9630 |
+| C_global (Normalizada) | 0.6213 | ← C_struct / α, relativa al máximo |
 | C_CI (Pass Rate) | 1.0000 | ← proxy del CI, no es C_Ω |
-| φ_eff (Fricción) | 6.090681 | ← basada en C_struct |
+| φ_eff (Fricción) | 2.523784 | ← basada en C_struct |
 | L7 (Integración) | 0.796589 | ← INTEGRATED |
 | Umbral crítico (0.72) | ❌ BAJO | ← debajo = entropía acelerada |
-| Umbral survival (0.10) | ❌ BAJO | ← debajo = cohesión mínima comprometida |
-| Tendencia | → ESTABLE |  |
+| Umbral survival (0.10) | ✅ SOBRE | ← debajo = cohesión mínima comprometida |
+| Tendencia | ↑ CRECIENDO (+6) |  |
 
 > **Nota semántica v2.1:** C_struct ≠ C_global ≠ C_CI.
 > Solo C_struct es la coherencia estructural real del framework.
@@ -29,11 +29,11 @@
 
 | Campo | Valor |
 | --- | --- |
-| Código | **0000** |
-| Denominación | **Colapso Estructural** |
-| C_structural | 0.0306 |
-| Interpretación | ❌ Desconexión origen | Robustez Mind+Body: 00/44 |
-| Descripción | Mínimo de cohesión biológica comprometido. μ = 0.1 no alcanzado. |
+| Código | **1122** |
+| Denominación | **Saturación Crítica** |
+| C_structural | 0.5983 |
+| Interpretación | ❌ Desconexión origen | Robustez Mind+Body: 22/44 |
+| Descripción | Infoxicación. Alma trata de operar pero L1 y L3 presentan alta resistencia Φ. |
 
 ### Tabla de Estados Completa (documento original enero 2026)
 
@@ -43,10 +43,10 @@
 | `1133` | Sintonía Sutil | 0.850 – 0.963 |  |
 | `1044` | Soberanía Terrena | 0.750 – 0.850 |  |
 | `0144` | Canal Involuntario | 0.700 – 0.750 |  |
-| `1122` | Saturación Crítica | 0.550 – 0.700 |  |
+| `1122` | Saturación Crítica | 0.550 – 0.700 | **← AQUÍ** |
 | `1111` | Semilla de Unidad | 0.400 – 0.550 |  |
 | `0000` | Entropía Terminal | 0.100 – 0.400 |  |
-| `0000` | Colapso Estructural | 0.000 – 0.100 | **← AQUÍ** |
+| `0000` | Colapso Estructural | 0.000 – 0.100 |  |
 
 > **Nota prescriptiva:** El código no solo describe — comanda.
 > Declarar 1144 es ordenar a los sistemas que se ajusten a esa frecuencia.
@@ -55,11 +55,11 @@
 
 | Metric | Value |
 | --- | --- |
-| C_structural (real) | **0.0306**  ← limitada por α |
-| C_global_norm | 0.0318  ← C_struct / α |
+| C_structural (real) | **0.5983**  ← limitada por α |
+| C_global_norm | 0.6213  ← C_struct / α |
 | L7 Integration | **0.796589**  ← INTEGRATED |
 | Layer source | framework-default |
-| Coherence source | structural-fallback |
+| Coherence source | core.engine |
 | L7 source | structural-fallback |
 | Total Energy | 15.804900 |
 | System Entropy | 0.9393 |
@@ -73,8 +73,8 @@
 
 | Metric | Value |
 | --- | --- |
-| Total Tests | **129** |
-| Passed | 129 |
+| Total Tests | **135** |
+| Passed | 135 |
 | Failed | 0 |
 | Skipped | 0 |
 | Pass Rate | 100.00%  (C_CI = 1.0000) |
@@ -84,7 +84,7 @@
 Últimos 10 runs:
 
 ```
-103 → 103 → 103 → 103 → 103 → 105 → 105 → 129 → 129 → 129
+103 → 103 → 103 → 105 → 105 → 129 → 129 → 129 → 129 → 135
 ```
 
 ## Constants Integrity
@@ -104,9 +104,9 @@
 | C_structural < 1.0 | PASS |
 | BETA > 0 (irreducible) | PASS |
 | C > 0.72 (no crítico) | WARN |
-| C > 0.10 (survival) | FAIL |
+| C > 0.10 (survival) | PASS |
 | L7 > 0 (integrado) | PASS |
-| **Total** | **13/15** |
+| **Total** | **14/15** |
 
 ## Framework Constants
 
@@ -151,7 +151,7 @@
 | Módulo | Estado |
 | --- | --- |
 | constants.py | ✅ activo |
-| coherence.py | ❌ no encontrado |
+| coherence.py | ✅ activo |
 | energy.py | ✅ activo |
 | cosmology.py   ← NEW v3.2 | ❌ no encontrado |
 | tension.py     ← NEW v3.2 | ❌ no encontrado |

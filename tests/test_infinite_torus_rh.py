@@ -41,11 +41,10 @@ def spectral_power(x, modes=8):
     n = x.size
     if n == 0:
         return np.array([], dtype=float)
-    k = np.arange(min(modes, n))
     j = np.arange(n)
     out = []
-    for kk in k:
-        w = np.exp(-2j * np.pi * kk * j / n)
+    for k in range(min(modes, n)):
+        w = np.exp(-2j * np.pi * k * j / n)
         out.append(abs(np.dot(x, w)) ** 2)
     return np.array(out, dtype=float)
 
@@ -53,18 +52,15 @@ def spectral_power(x, modes=8):
 def compute_torus_field(M_list, x_max=100000):
     primes = primerange(2, x_max)
     results = []
-
     for M in M_list:
         phi_M = totient(M)
         admissible = [a for a in range(M) if math.gcd(a, M) == 1]
         counts = np.zeros(M, dtype=float)
         prime_hits = 0
-
         for p in primes:
             if math.gcd(p, M) == 1:
                 counts[p % M] += 1.0
                 prime_hits += 1
-
         if phi_M == 0 or not admissible or prime_hits == 0:
             epsilon = np.zeros(1, dtype=float)
             E_M = 0.0
@@ -72,19 +68,19 @@ def compute_torus_field(M_list, x_max=100000):
         else:
             epsilon = np.array(
                 [counts[a] / prime_hits - 1.0 / phi_M for a in admissible],
-                dtype=float
+                dtype=float,
             )
             E_M = float(np.mean(epsilon ** 2))
             spectrum = spectral_power(epsilon, modes=8)
-
-        results.append({
-            "M": M,
-            "phi_M": phi_M,
-            "prime_hits": prime_hits,
-            "E_M": E_M,
-            "spectrum": spectrum,
-        })
-
+        results.append(
+            {
+                "M": M,
+                "phi_M": phi_M,
+                "prime_hits": prime_hits,
+                "E_M": E_M,
+                "spectrum": spectrum,
+            }
+        )
     return results
 
 

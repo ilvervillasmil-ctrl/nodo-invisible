@@ -1,9 +1,5 @@
-#!/usr/bin/env python3
-# infinite_torus_rh.py - GitHub Action safe version (no sympy, no scipy)
-
 import math
 import numpy as np
-import matplotlib.pyplot as plt
 
 
 def is_prime(n):
@@ -69,22 +65,24 @@ def compute_torus_field(M_list, x_max=100000):
         if phi_M == 0 or not admissible or prime_hits == 0:
             epsilon = np.zeros(1, dtype=float)
             E_M = 0.0
-            spectral_power = np.zeros(1, dtype=float)
+            spectrum = np.zeros(1, dtype=float)
         else:
             epsilon = np.array(
                 [counts[a] / prime_hits - 1.0 / phi_M for a in admissible],
                 dtype=float
             )
             E_M = float(np.mean(epsilon ** 2))
-            spectral_power = np.abs(dft(epsilon)) ** 2
+            spectrum = np.abs(dft(epsilon)) ** 2
 
-        results.append({
-            'M': M,
-            'phi_M': phi_M,
-            'prime_hits': prime_hits,
-            'E_M': E_M,
-            'spectrum': spectral_power,
-        })
+        results.append(
+            {
+                "M": M,
+                "phi_M": phi_M,
+                "prime_hits": prime_hits,
+                "E_M": E_M,
+                "spectrum": spectrum,
+            }
+        )
 
     return results
 
@@ -100,33 +98,17 @@ def fit_convergence(phi_M, E_M):
     return z, C_inf
 
 
-def main():
+def test_infinite_torus_pipeline_runs():
     M_list = [2, 6, 30, 210, 2310, 30030, 510510]
     data = compute_torus_field(M_list)
 
-    phi_M = np.array([r['phi_M'] for r in data], dtype=float)
-    E_M = np.array([r['E_M'] for r in data], dtype=float)
+    assert len(data) == len(M_list)
+
+    phi_M = np.array([r["phi_M"] for r in data], dtype=float)
+    E_M = np.array([r["E_M"] for r in data], dtype=float)
+
+    assert np.all(phi_M > 0)
+    assert np.all(E_M >= 0)
 
     z, C_inf = fit_convergence(phi_M, E_M)
-    fitted = 10 ** (z[0] * np.log10(phi_M) + z[1]) if C_inf > 0 else np.zeros_like(E_M)
-
-    plt.figure(figsize=(10, 6))
-    plt.loglog(phi_M, E_M, 'ro-', linewidth=3, markersize=8, label='E(M)')
-    if C_inf > 0:
-        plt.loglog(phi_M, fitted, 'b--', linewidth=2, label=f'Fit: C_inf={C_inf:.2e}')
-    plt.xlabel('φ(M)', fontsize=14)
-    plt.ylabel('E(M)', fontsize=14)
-    plt.title('Infinite Torus Convergence', fontsize=16)
-    plt.grid(True, alpha=0.3)
-    plt.legend()
-    plt.savefig('torus_convergence.png', dpi=300, bbox_inches='tight')
-    plt.close()
-
-    print(f'RH PREDICTION: E_∞ ≈ {C_inf:.2e}')
-    print('RH holds if E_∞ < 1e-6')
-    for r in data:
-        print(r['M'], r['phi_M'], f"{r['E_M']:.12e}", r['prime_hits'])
-
-
-if __name__ == '__main__':
-    main()
+    assert np.isfinite(C_inf)

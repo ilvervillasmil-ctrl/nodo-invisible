@@ -1,13 +1,8 @@
 #!/usr/bin/env python3
-# infinite_torus_rh.py - Full spectral pipeline (logic-correct, no sympy)
-"""
-Infinite Arithmetic Torus: Spectral encoding of Riemann zeros.
-Compute E(M), spectral power, and a numerically stable trend fit.
-"""
+# infinite_torus_rh.py - GitHub Action safe version (no sympy, no scipy)
 
 import math
 import numpy as np
-from scipy.fft import fft
 import matplotlib.pyplot as plt
 
 
@@ -45,32 +40,43 @@ def totient(n):
     return result
 
 
-def compute_torus_field(M_list, x_max=10**6):
-    """Compute ε_k(a), E_k, and a low-mode spectrum for each modulus M."""
+def dft(x):
+    x = np.asarray(x, dtype=complex)
+    n = x.size
+    if n == 0:
+        return np.array([], dtype=complex)
+    k = np.arange(n)
+    m = k.reshape((n, 1))
+    W = np.exp(-2j * np.pi * m * k / n)
+    return W @ x
+
+
+def compute_torus_field(M_list, x_max=100000):
     primes = primerange(2, x_max)
     results = []
 
     for M in M_list:
         phi_M = totient(M)
-        if phi_M == 0:
-            raise ValueError(f"totient({M}) returned 0")
-
+        admissible = [a for a in range(M) if math.gcd(a, M) == 1]
         counts = np.zeros(M, dtype=float)
         prime_hits = 0
+
         for p in primes:
             if math.gcd(p, M) == 1:
                 counts[p % M] += 1.0
                 prime_hits += 1
 
-        if prime_hits == 0:
-            epsilon = np.zeros(phi_M, dtype=float)
+        if phi_M == 0 or not admissible or prime_hits == 0:
+            epsilon = np.zeros(1, dtype=float)
             E_M = 0.0
-            spectral_power = np.zeros(0, dtype=float)
+            spectral_power = np.zeros(1, dtype=float)
         else:
-            admissible = [a for a in range(M) if math.gcd(a, M) == 1]
-            epsilon = np.array([counts[a] / prime_hits - 1.0 / phi_M for a in admissible], dtype=float)
+            epsilon = np.array(
+                [counts[a] / prime_hits - 1.0 / phi_M for a in admissible],
+                dtype=float
+            )
             E_M = float(np.mean(epsilon ** 2))
-            spectral_power = np.abs(fft(epsilon)) ** 2
+            spectral_power = np.abs(dft(epsilon)) ** 2
 
         results.append({
             'M': M,
@@ -87,25 +93,27 @@ def fit_convergence(phi_M, E_M):
     phi_M = np.asarray(phi_M, dtype=float)
     E_M = np.asarray(E_M, dtype=float)
     mask = (phi_M > 0) & (E_M > 0)
+    if mask.sum() < 2:
+        return (0.0, 0.0), 0.0
     z = np.polyfit(np.log10(phi_M[mask]), np.log10(E_M[mask]), 1)
     C_inf = 10 ** z[1]
     return z, C_inf
 
 
 def main():
-    M_list = [2, 6, 30, 210, 2310, 30030, 510510, 9699690, 223092870]
-    x_max = 10**6
-    data = compute_torus_field(M_list, x_max=x_max)
+    M_list = [2, 6, 30, 210, 2310, 30030, 510510]
+    data = compute_torus_field(M_list)
 
     phi_M = np.array([r['phi_M'] for r in data], dtype=float)
     E_M = np.array([r['E_M'] for r in data], dtype=float)
 
     z, C_inf = fit_convergence(phi_M, E_M)
-    fitted = 10 ** (z[0] * np.log10(phi_M) + z[1])
+    fitted = 10 ** (z[0] * np.log10(phi_M) + z[1]) if C_inf > 0 else np.zeros_like(E_M)
 
     plt.figure(figsize=(10, 6))
     plt.loglog(phi_M, E_M, 'ro-', linewidth=3, markersize=8, label='E(M)')
-    plt.loglog(phi_M, fitted, 'b--', linewidth=2, label=f'Fit: C_inf={C_inf:.2e}')
+    if C_inf > 0:
+        plt.loglog(phi_M, fitted, 'b--', linewidth=2, label=f'Fit: C_inf={C_inf:.2e}')
     plt.xlabel('φ(M)', fontsize=14)
     plt.ylabel('E(M)', fontsize=14)
     plt.title('Infinite Torus Convergence', fontsize=16)

@@ -36,15 +36,18 @@ def totient(n):
     return result
 
 
-def dft(x):
-    x = np.asarray(x, dtype=complex)
+def spectral_power(x, modes=8):
+    x = np.asarray(x, dtype=float)
     n = x.size
     if n == 0:
-        return np.array([], dtype=complex)
-    k = np.arange(n)
-    m = k.reshape((n, 1))
-    W = np.exp(-2j * np.pi * m * k / n)
-    return W @ x
+        return np.array([], dtype=float)
+    k = np.arange(min(modes, n))
+    j = np.arange(n)
+    out = []
+    for kk in k:
+        w = np.exp(-2j * np.pi * kk * j / n)
+        out.append(abs(np.dot(x, w)) ** 2)
+    return np.array(out, dtype=float)
 
 
 def compute_torus_field(M_list, x_max=100000):
@@ -72,17 +75,15 @@ def compute_torus_field(M_list, x_max=100000):
                 dtype=float
             )
             E_M = float(np.mean(epsilon ** 2))
-            spectrum = np.abs(dft(epsilon)) ** 2
+            spectrum = spectral_power(epsilon, modes=8)
 
-        results.append(
-            {
-                "M": M,
-                "phi_M": phi_M,
-                "prime_hits": prime_hits,
-                "E_M": E_M,
-                "spectrum": spectrum,
-            }
-        )
+        results.append({
+            "M": M,
+            "phi_M": phi_M,
+            "prime_hits": prime_hits,
+            "E_M": E_M,
+            "spectrum": spectrum,
+        })
 
     return results
 
@@ -112,3 +113,8 @@ def test_infinite_torus_pipeline_runs():
 
     z, C_inf = fit_convergence(phi_M, E_M)
     assert np.isfinite(C_inf)
+
+    for r in 
+        assert r["spectrum"].ndim == 1
+        assert r["spectrum"].size > 0
+        assert np.all(np.isfinite(r["spectrum"]))

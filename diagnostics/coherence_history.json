@@ -389,5 +389,22 @@
     "failed": 0,
     "skipped": 0,
     "pass_rate": 100.0
+  },
+  {
+    "timestamp": "2026-05-04T04:39:36.011316+00:00",
+    "passed": 171,
+    "failed": 0,
+    "total": 171,
+    "pass_rate": 100.0,
+    "c_structural": 0.598327361407561
+  },
+  {
+    "timestamp": "2026-05-04 04:39:36 UTC",
+    "sha": "455b7a8",
+    "total": 171,
+    "passed": 171,
+    "failed": 0,
+    "skipped": 0,
+    "pass_rate": 100.0
   }
 ]

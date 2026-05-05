@@ -171,10 +171,12 @@ def estimate_lambda_min(price_series, window=20):
 
 
 def classify_regime(hurst, beta_scaling, lambda_min):
-    if beta_scaling > 0.45 and beta_scaling < 0.55 and lambda_min < 0.3:
-        return "CRITICAL"
+    # COLLAPSING se evalúa PRIMERO
     if lambda_min < 0.4 or hurst < 0.4:
         return "COLLAPSING"
+    # CRITICAL después
+    if beta_scaling > 0.45 and beta_scaling < 0.55 and lambda_min < 0.3:
+        return "CRITICAL"
     if hurst > 0.58 and beta_scaling > 0.55:
         return "EXPANDING"
     if hurst > 0.45 and hurst < 0.58 and lambda_min > 0.5:

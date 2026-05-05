@@ -171,11 +171,14 @@ def estimate_lambda_min(price_series, window=20):
 
 
 def classify_regime(hurst, beta_scaling, lambda_min):
-    # CRITICAL tiene prioridad: β≈0.5 y λ_min pequeño
+    # COLLAPSING por Hurst bajo (mercado antipersistente/ruidoso)
+    if hurst < 0.4:
+        return "COLLAPSING"
+    # CRITICAL: β≈0.5 y pérdida de coherencia
     if beta_scaling > 0.45 and beta_scaling < 0.55 and lambda_min < 0.3:
         return "CRITICAL"
-    # COLLAPSING: pérdida de coherencia
-    if lambda_min < 0.4 or hurst < 0.4:
+    # COLLAPSING por pérdida de coherencia estructural
+    if lambda_min < 0.4:
         return "COLLAPSING"
     if hurst > 0.58 and beta_scaling > 0.55:
         return "EXPANDING"
@@ -331,8 +334,8 @@ def test_run_backtest():
 
 def test_classify_regime():
     assert classify_regime(0.6, 0.6, 0.6) == "EXPANDING"
-    assert classify_regime(0.5, 0.5, 0.2) == "CRITICAL"
     assert classify_regime(0.3, 0.5, 0.2) == "COLLAPSING"
+    assert classify_regime(0.5, 0.5, 0.2) == "CRITICAL"
     assert classify_regime(0.5, 0.4, 0.6) == "STABLE"
 
 

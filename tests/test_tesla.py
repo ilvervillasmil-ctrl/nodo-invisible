@@ -10,13 +10,14 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 # =========================
-# IMPORTAR CONSTANTES DEL FRAMEWORK UIS
+# IMPORTAR CONSTANTES DEL FRAMEWORK UIS (CORRECTAMENTE)
 # =========================
 
 from formulas.constants import (
     ALPHA, BETA, PHI, EPSILON_OBSERVER,
     THETA_CUBE, OMEGA_D, PHI_TOTAL, ZETA,
-    LAMBDA_UCF, LAMBDA_OBS, LAMBDA_ERROR
+    LAMBDA_UCF, LAMBDA_OBS, LAMBDA_ERROR,
+    PHI_CRITICAL, OMEGA_0
 )
 from formulas.dynamics import oscillator_solution, regime, is_alive
 
@@ -26,76 +27,44 @@ from formulas.dynamics import oscillator_solution, regime, is_alive
 
 K_THRESHOLD_BASE = ALPHA - EPSILON_OBSERVER  # 0.9358
 
+
 # =========================
 # GENERACIÓN DE DATOS SINTÉTICOS (reemplaza a yfinance)
 # =========================
 
 def generate_synthetic_market_data(days=90, start_price=100, volatility=0.02, trend=0.0001):
-    """
-    Genera datos de mercado sintéticos usando la ecuación del oscilador del framework.
-    
-    Esto reemplaza completamente a yfinance. Los datos siguen la misma dinámica
-    que el framework UIS modela para sistemas vivos.
-    
-    Args:
-        days: Número de días a generar
-        start_price: Precio inicial
-        volatility: Volatilidad (desviación estándar diaria)
-        trend: Tendencia diaria (positiva o negativa)
-    
-    Returns:
-        DataFrame con columnas 'Close' y 'Volume'
-    """
+    """Genera datos de mercado sintéticos usando la ecuación del oscilador del framework."""
     t = np.linspace(0, days, days)
-    
-    # Usar la solución del oscilador para generar el movimiento base
-    # A=amplitud, delta=fase inicial
     oscillator_component = oscillator_solution(t, A=volatility * 10, delta=0.0)
-    
-    # Añadir tendencia y ruido
     trend_component = trend * t
     noise = np.random.normal(0, volatility, days)
-    
-    # Precios sintéticos
     prices = start_price * (1 + trend_component + oscillator_component / 100 + noise)
-    prices = np.maximum(prices, start_price * 0.5)  # Evitar precios negativos
+    prices = np.maximum(prices, start_price * 0.5)
     
-    # Crear DataFrame
     start_date = datetime.now() - timedelta(days=days)
     dates = [start_date + timedelta(days=i) for i in range(days)]
     
-    df = pd.DataFrame({
-        'Close': prices,
-        'Volume': np.random.randint(1000000, 10000000, days)
-    }, index=dates)
-    
+    df = pd.DataFrame({'Close': prices, 'Volume': np.random.randint(1000000, 10000000, days)}, index=dates)
     return df
 
 
 def generate_tesla_like_data(days=90):
-    """
-    Genera datos que imitan el comportamiento de Tesla en 2026.
-    Características: alta volatilidad, tendencia bajista, régimen CRITICAL.
-    """
-    # Tesla en 2026: alta volatilidad, tendencia bajista
+    """Genera datos que imitan el comportamiento de Tesla en 2026."""
     return generate_synthetic_market_data(
         days=days,
-        start_price=450,      # Precio inicial aproximado de Tesla
-        volatility=0.035,     # Alta volatilidad (3.5% diario)
-        trend=-0.002          # Tendencia bajista (-0.2% diario)
+        start_price=450,
+        volatility=0.035,
+        trend=-0.002
     )
 
 
 def generate_stable_market_data(days=90):
-    """
-    Genera datos de mercado estable (para comparación).
-    Características: baja volatilidad, tendencia alcista, régimen STABLE.
-    """
+    """Genera datos de mercado estable (para comparación)."""
     return generate_synthetic_market_data(
         days=days,
         start_price=100,
-        volatility=0.008,     # Baja volatilidad
-        trend=0.0005          # Tendencia alcista suave
+        volatility=0.008,
+        trend=0.0005
     )
 
 
@@ -240,10 +209,6 @@ def classify_regime(hurst, beta_scaling, lambda_min):
     return "STABLE", "Régimen normal"
 
 
-# =========================
-# CÁLCULO DE K (CORRELACIÓN)
-# =========================
-
 def compute_k_from_price(price_series, window=20):
     """Calcula K como Information Coefficient simple"""
     if len(price_series) < window + 10:
@@ -320,10 +285,11 @@ def decide_investment(c_omega, k, hurst, lambda_min, regime):
 
 
 # =========================
-# TEST CON DATOS SINTÉTICOS (reemplaza a yfinance)
+# FUNCIÓN PRINCIPAL DE TEST
 # =========================
 
 def run_synthetic_test():
+    """Ejecuta el test con datos sintéticos"""
     print("=" * 80)
     print("VPSI MARKET REGIME DETECTION - SYNTHETIC DATA TEST")
     print("(No external dependencies - can run in CI)")
@@ -439,11 +405,13 @@ def test_system_health():
     print("VERIFICACIÓN DEL SISTEMA (UCF v3.3)")
     print("=" * 80)
     
+    # Usar las constantes importadas correctamente (PHI_TOTAL, etc. ya están importadas)
     print(f"\nParámetros del oscilador:")
     print(f"  PHI_TOTAL = {PHI_TOTAL:.6f}")
     print(f"  PHI_CRITICAL = {PHI_CRITICAL:.6f}")
     print(f"  ZETA = {ZETA:.6f}")
     print(f"  OMEGA_D = {OMEGA_D:.6f}")
+    print(f"  OMEGA_0 = {OMEGA_0:.6f}")
     print(f"  Régimen: {regime(PHI_TOTAL)}")
     print(f"  Sistema vivo: {is_alive(PHI_TOTAL)}")
     
@@ -461,20 +429,45 @@ def test_system_health():
     # Verificaciones estructurales
     assertions_passed = True
     try:
-        from formulas.constants import (
-            ALPHA, BETA, THETA_CUBE, PHI_TOTAL, PHI_CRITICAL, ZETA, OMEGA_D
-        )
-        assert abs(ALPHA + BETA - 1.0) < 1e-9
-        assert abs(math.sin(THETA_CUBE) ** 2 - BETA) < 1e-9
-        assert PHI_TOTAL < PHI_CRITICAL
-        assert ZETA < 1.0
-        assert OMEGA_D > 0
+        assert abs(ALPHA + BETA - 1.0) < 1e-9, "alpha + beta != 1"
+        assert abs(math.sin(THETA_CUBE) ** 2 - BETA) < 1e-9, "sin^2(theta_cube) != beta"
+        assert PHI_TOTAL < PHI_CRITICAL, "System not underdamped: phi_total >= 2*pi"
+        assert ZETA < 1.0, "System not underdamped: zeta >= 1"
+        assert OMEGA_D > 0, "System not oscillating: omega_d <= 0"
         print("\n✅ Todas las verificaciones estructurales pasaron.")
     except AssertionError as e:
         assertions_passed = False
         print(f"\n❌ Falló verificación estructural: {e}")
     
     return assertions_passed
+
+
+# =========================
+# TEST DE PYTEST
+# =========================
+
+def test_synthetic_market_regime():
+    """Test principal para pytest - verifica que el modelo funciona sin errores"""
+    results = run_synthetic_test()
+    assert len(results) > 0
+    assert all(r["decision"] in ["INVEST", "HOLD"] for r in results)
+    assert all(r["regime"] in ["CRITICAL", "COLLAPSING", "EXPANDING", "STABLE"] for r in results)
+
+
+def test_system_health_pytest():
+    """Test de salud del sistema para pytest"""
+    assert test_system_health() is True
+
+
+def test_constants_consistency():
+    """Verifica que las constantes del framework sean consistentes"""
+    from formulas.constants import ALPHA, BETA, THETA_CUBE, PHI_TOTAL, PHI_CRITICAL, ZETA, OMEGA_D
+    
+    assert abs(ALPHA + BETA - 1.0) < 1e-9
+    assert abs(math.sin(THETA_CUBE) ** 2 - BETA) < 1e-9
+    assert PHI_TOTAL < PHI_CRITICAL
+    assert ZETA < 1.0
+    assert OMEGA_D > 0
 
 
 # =========================

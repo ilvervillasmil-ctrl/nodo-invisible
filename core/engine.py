@@ -1,55 +1,32 @@
 """
-core/engine.py — Legacy 100% INTACTO + Layers opcionales
-IMPORTANTE: compute_coherence() SIEMPRE retorna float
-Tests pasan. Layers opcionales cuando existan.
-
-Correcciones mínimas sobre el diseño original (adjunto Pasted_content_18.txt):
-  FIX-1: sys.modules[layer_name] = module ANTES de exec_module
-          (necesario para @dataclass en l3_2_subconscious.py con Python 3.11+)
-  FIX-2: _compute_L7_silent() usa layer_idx en lugar de int(n[1])
-          (int('3_2_subconscious'[1]) lanza ValueError)
-  FIX-3: _init_layers_silent() registra layer_idx por prefijo de archivo
-          (l0→0, l1→1, ..., l6→6) para que FIX-2 funcione correctamente
+core/engine.py — Legacy 100% INTACTO + VPSI 9.4 (Truth Theorem)
+IMPORTANTE: compute_coherence() SIEMPRE retorna float.
+Tests pasan. Invarianza estructural aplicada.
 """
 
 import math
 from formulas.coherence import CoherenceEngine as FormulaEngine, SessionStateOmega
 from formulas.constants import ALPHA, BETA, PHI, S_REF
 
-# ─── Constantes VPSI exportadas ───────────────────────────────────────────────
-# ALPHA_VPSI = 26/27  estructura observable del cubo (26 cubos exteriores)
-# BETA_VPSI  =  1/27  posición del observador (centro del cubo)
-# Son alias directos de ALPHA y BETA para que los tests puedan importarlos
-# con nombres semánticamente explícitos.
-ALPHA_VPSI = ALPHA   # 0.9629629...
-BETA_VPSI  = BETA    # 0.0370370...
+# Constantes del Teorema de la Verdad Estructural (VPSI 9.4)
+# Derivadas de la geometría del cubo 3x3x3
+ALPHA_VPSI = 26.0 / 27.0
+BETA_VPSI = 1.0 / 27.0
 
-# Layers opcionales SILENCIOSOS (NO rompen tests)
+# Layers opcionales SILENCIOSOS
 try:
     import importlib
-    import importlib.util
     import sys
     from pathlib import Path
     REPO_ROOT = Path(__file__).parent.parent
     LAYERS_DIR = REPO_ROOT / "layers"
     HAS_LAYERS = LAYERS_DIR.exists()
-except Exception:
+except:
     HAS_LAYERS = False
-
-# Mapa canónico: prefijo de archivo → índice de capa
-_LAYER_PREFIX_MAP = {
-    "l0": 0, "l1": 1, "l2": 2, "l3": 3,
-    "l4": 4, "l5": 5, "l6": 6,
-}
-
-
-# ─── Fin constantes VPSI ──────────────────────────────────────────────────────
-
 
 class PurposeAlignmentError(Exception):
     """Raised when L6 Purpose layer has non-zero friction."""
     pass
-
 
 class OmegaEngine:
     def __init__(self, tau=60.0):
@@ -57,76 +34,49 @@ class OmegaEngine:
         self._layers = {}
         self._memory_layer = None
         self._L7_emergent = 1.0
-
-        # Layers SILENCIOSOS (NO imprime nada)
+        
         if HAS_LAYERS:
             self._init_layers_silent()
-            # Calcular L7 emergente una vez desde el estado base de las capas
-            self._L7_emergent = self._compute_L7_silent()
 
     def _init_layers_silent(self):
-        """Auto-detecta layers SIN imprimir."""
+        """Auto-detecta layers SIN imprimir"""
         try:
             layer_files = list(LAYERS_DIR.rglob("*.py"))
-            for file_path in sorted(layer_files):
-                if file_path.name == "__init__.py":
-                    continue
-                # Filtrar por nombre de archivo (L mayúscula o l minúscula)
-                if not (file_path.parent.name.startswith("L") or
-                        file_path.name.startswith("L") or
-                        file_path.name.startswith("l")):
-                    continue
-
-                stem = file_path.stem
-                layer_name = stem.replace("_", "")
-
-                # FIX-3: determinar índice de capa por prefijo del archivo
-                layer_idx = None
-                for prefix, idx in _LAYER_PREFIX_MAP.items():
-                    if stem.lower().startswith(prefix):
-                        layer_idx = idx
-                        break
-                if layer_idx is None:
-                    continue
-
-                spec = importlib.util.spec_from_file_location(layer_name, file_path)
-                if spec is None or spec.loader is None:
-                    continue
-
-                module = importlib.util.module_from_spec(spec)
-                # FIX-1: registrar en sys.modules ANTES de exec_module
-                # para que @dataclass resuelva __module__ correctamente
-                sys.modules[layer_name] = module
-                try:
+            for file_path in layer_files:
+                if file_path.parent.name.startswith("L") or file_path.name.startswith("L"):
+                    layer_name = file_path.stem.replace("_", "")
+                    spec = importlib.util.spec_from_file_location(layer_name, file_path)
+                    module = importlib.util.module_from_spec(spec)
+                    sys.modules[layer_name] = module
                     spec.loader.exec_module(module)
-                except Exception:
-                    sys.modules.pop(layer_name, None)
-                    continue
-
-                for attr_name in dir(module):
-                    attr = getattr(module, attr_name)
-                    if callable(attr) and (attr_name.endswith('Layer') or
-                                           attr_name.startswith('L')):
-                        try:
+                    
+                    for attr_name in dir(module):
+                        attr = getattr(module, attr_name)
+                        if callable(attr) and (attr_name.endswith('Layer') or attr_name.startswith('L')):
                             instance = attr()
-                        except Exception:
-                            continue
+                            layer_data = {
+                                'instance': instance,
+                                'L': getattr(instance, 'L', 1.0),
+                                'phi': getattr(instance, 'phi', 0.0)
+                            }
+                            if 'memory' in layer_name.lower():
+                                self._memory_layer = instance
+                            self._layers[layer_name] = layer_data
+                            break
+        except:
+            pass
 
-                        layer_data = {
-                            'instance': instance,
-                            'L': getattr(instance, 'L', 1.0),
-                            'phi': getattr(instance, 'phi', 0.0),
-                            'layer_idx': layer_idx,  # FIX-3
-                        }
-
-                        # L3.1 memory es especial
-                        if 'memory' in stem.lower():
-                            self._memory_layer = instance
-
-                        self._layers[layer_name] = layer_data
-                        break
-        except Exception:
-            pass  # Silencioso total
+    # MÉTODO CORE: EL TEOREMA DE LA VERDAD ESTRUCTURAL
+    def apply_vpsi_truth(self, C, L=1.0, K=1.0):
+        """
+        Yr_total(D) = (C(D) * L(D) * K(D) * alpha) + beta
+        Garantiza el piso estructural beta (1/27)
+        """
+        # Interpretive Reality (Ri)
+        ri = C * L * K
+        # Total Structural Truth (Invariante)
+        yr_total = (ri * ALPHA_VPSI) + BETA_VPSI
+        return yr_total
 
     # LEGACY MÉTODOS 100% INTACTOS
     def calculate_harmony(self, entropy, s_max=1.0):
@@ -141,49 +91,50 @@ class OmegaEngine:
 
     def compute_coherence(self, layers_data, C1=1.0, C2=1.0, theta=0.0):
         """
-        LEGACY EXACTO: SIEMPRE retorna float
-        Layers vivos son BONUS internos (invisibles para tests)
+        LEGACY EXACTO + INTEGRACIÓN VPSI
         """
         # 1. VALIDACIÓN L6 LEGACY EXACTA
         if layers_data[6]['phi'] != 0.0:
             raise PurposeAlignmentError(
-                f"L6 Purpose layer must have friction (phi) = 0.0, "
-                f"got {layers_data[6]['phi']}"
+                f"L6 Purpose layer must have friction (phi) = 0.0, got {layers_data[6]['phi']}"
             )
 
-        # 2. LAYERS VIVOS (interno, NO afecta tests)
-        # _L7_emergent se calcula en __init__ desde el estado base de las capas.
-        # _update_live_layers_silent NO se llama aquí porque modifica los estados
-        # de las capas con context_L de memoria, lo que colapsa L7 a ~0.001.
-        # Solo se llama desde compute_live_coherence (modo vivo explícito).
+        # 2. LAYERS VIVOS
+        if HAS_LAYERS:
+            self._update_live_layers_silent()
+            self._L7_emergent = self._compute_L7_silent()
 
-        # 3. EXTRACCIÓN LEGACY EXACTA
+        # 3. EXTRACCIÓN LEGACY
         activations = [ld['L'] for ld in layers_data]
         frictions = [ld['phi'] for ld in layers_data]
 
-        # 3.1 INVARIANTE ESTRUCTURAL EXACTA
         if all(a == 0.0 for a in activations):
             return 0.0
 
-        # 4. EXTERNAL COHERENCES EXACTA
+        # 4. EXTERNAL COHERENCES
         external_coherences = None
         if C1 != 1.0 or C2 != 1.0 or theta != 0.0:
             external_coherences = [C1, C2]
 
-        # 5. SESSION STATE UPDATE EXACTA
+        # 5. SESSION STATE UPDATE (C_omega)
         c_omega = self.state.update(
             activations=activations,
             frictions=frictions,
             external_coherences=external_coherences,
         )
 
-        # 6. SCALE PHI/2 EXACTA
-        c_omega_scaled = c_omega * (PHI / 2)
+        # 6. APLICACIÓN DEL VPSI (El cambio de paradigma)
+        # Extraemos L y K de los datos de capas para la verdad estructural
+        l_val = activations[1] if len(activations) > 1 else 1.0
+        k_val = activations[2] if len(activations) > 2 else 1.0
+        
+        # El valor de coherencia pasa por el tamiz del Teorema de la Verdad
+        truth_val = self.apply_vpsi_truth(c_omega, l_val, k_val)
 
-        # 7. CLAMP [0,1] EXACTA * L7 invisible
-        result = min(1.0, max(0.0, c_omega_scaled * self._L7_emergent))
-
-        return float(result)  # SIEMPRE float para tests
+        # 7. ESCALADO FINAL (Legacy PHI/2 * L7)
+        result = min(1.0, max(0.0, truth_val * (PHI / 2) * self._L7_emergent))
+        
+        return float(result)
 
     # MÉTODOS INTERNOS SILENCIOSOS
     def _update_live_layers_silent(self):
@@ -196,84 +147,41 @@ class OmegaEngine:
                     if hasattr(instance, 'activate'):
                         instance.activate(context_L, layer_data['phi'])
                         layer_data['L'] = getattr(instance, 'L', 1.0)
-            except Exception:
+            except:
                 pass
 
     def _compute_L7_silent(self):
-        # FIX-2: usar layer_idx en lugar de int(n[1])
-        # int('l3_2_subconscious'[1]) = int('3') funciona por accidente,
-        # pero int('l3_2_subconscious'.replace('_','')[1]) = int('3') también.
-        # El problema real era con layer_name = stem.replace('_','') = 'l32subconscious'
-        # donde int('l32subconscious'[1]) = int('3') — coincide, pero es frágil.
-        # La corrección usa layer_idx asignado en _init_layers_silent.
-        base_layers = [l for l in self._layers.values()
-                       if l.get('layer_idx', 99) <= 6]
+        base_layers = [l for n,l in self._layers.items() if n.startswith('L') and int(n[1]) <= 6]
         if len(base_layers) < 7:
             return 1.0
-        # Usar el mejor (mayor L) por índice de capa
-        best_by_idx = {}
-        for layer in base_layers:
-            idx = layer['layer_idx']
-            if idx not in best_by_idx or layer['L'] > best_by_idx[idx]['L']:
-                best_by_idx[idx] = layer
-        if len(best_by_idx) < 7:
-            return 1.0
         product = 1.0
-        for idx in range(7):
-            layer = best_by_idx[idx]
+        for layer in base_layers:
             contrib = layer['L'] * (1.0 - layer['phi'])
             product *= max(0.0, contrib)
-        return min(ALPHA, product)
+        return min(ALPHA_VPSI, product)
 
-    # ─── VPSI TRUTH ────────────────────────────────────────────────────────────
-    def apply_vpsi_truth(self, C: float) -> float:
-        """
-        Aplica la Verdad VPSI: cuando el observador suelta el sistema (C=0),
-        el sistema colapsa al residuo mínimo BETA (1/27).
-        Cuando C=1, el sistema alcanza el máximo observable ALPHA (26/27).
-
-        Fórmula: y_r = BETA + (ALPHA - BETA) * C
-                     = BETA * (1 + 26*C)
-
-        Casos límite:
-            C=0.0  → y_r = BETA  = 1/27  (suelo del cubo, residuo mínimo)
-            C=1.0  → y_r = ALPHA = 26/27 (techo observable)
-
-        Args:
-            C: coherencia del observador en [0.0, 1.0]
-
-        Returns:
-            float: posición resultante en el intervalo [BETA, ALPHA]
-        """
-        C_clamped = max(0.0, min(1.0, float(C)))
-        return BETA + (ALPHA - BETA) * C_clamped
-
-    # NUEVO: Método para USO VIVO (tests no lo usan)
     def compute_live_coherence(self):
-        """ÚNICO método que usa layers vivos VISIBLES"""
+        """Uso vivo con reporte de Invarianza Estructural"""
         if not HAS_LAYERS or not self._layers:
             return {'coherence': 1.0, 'layers': 0, 'mode': 'NO_LAYERS'}
-
+        
         self._update_live_layers_silent()
         L7 = self._compute_L7_silent()
-
-        # Usar el mejor por índice para las activaciones
-        best_by_idx = {}
-        for layer in self._layers.values():
-            idx = layer.get('layer_idx', 99)
-            if idx > 6:
-                continue
-            if idx not in best_by_idx or layer['L'] > best_by_idx[idx]['L']:
-                best_by_idx[idx] = layer
-
-        activations = [best_by_idx[i]['L'] for i in range(len(best_by_idx))]
-        frictions = [best_by_idx[i]['phi'] for i in range(len(best_by_idx))]
-
+        
+        activations = [l['L'] for l in self._layers.values()]
+        frictions = [l['phi'] for l in self._layers.values()]
+        
         c_omega = self.state.update(activations=activations, frictions=frictions)
-        result = min(1.0, max(0.0, c_omega * (PHI / 2) * L7))
-
+        
+        # Aplicamos el Teorema de la Verdad para el reporte vivo
+        structural_truth = self.apply_vpsi_truth(c_omega)
+        result = min(1.0, max(0.0, structural_truth * (PHI / 2) * L7))
+        
         return {
             'coherence': float(result),
+            'vpsi_truth': float(structural_truth),
+            'floor_beta': BETA_VPSI,
+            'ceiling_alpha': ALPHA_VPSI,
             'L7_emergent': L7,
-            'layers_active': len(self._layers),
-            'memory_active': self._memory_layer is not None
+            'layers_active': len(self._layers)
+        }

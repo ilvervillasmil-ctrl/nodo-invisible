@@ -16,6 +16,14 @@ import math
 from formulas.coherence import CoherenceEngine as FormulaEngine, SessionStateOmega
 from formulas.constants import ALPHA, BETA, PHI, S_REF
 
+# ─── Constantes VPSI exportadas ───────────────────────────────────────────────
+# ALPHA_VPSI = 26/27  estructura observable del cubo (26 cubos exteriores)
+# BETA_VPSI  =  1/27  posición del observador (centro del cubo)
+# Son alias directos de ALPHA y BETA para que los tests puedan importarlos
+# con nombres semánticamente explícitos.
+ALPHA_VPSI = ALPHA   # 0.9629629...
+BETA_VPSI  = BETA    # 0.0370370...
+
 # Layers opcionales SILENCIOSOS (NO rompen tests)
 try:
     import importlib
@@ -33,6 +41,9 @@ _LAYER_PREFIX_MAP = {
     "l0": 0, "l1": 1, "l2": 2, "l3": 3,
     "l4": 4, "l5": 5, "l6": 6,
 }
+
+
+# ─── Fin constantes VPSI ──────────────────────────────────────────────────────
 
 
 class PurposeAlignmentError(Exception):
@@ -214,6 +225,29 @@ class OmegaEngine:
             product *= max(0.0, contrib)
         return min(ALPHA, product)
 
+    # ─── VPSI TRUTH ────────────────────────────────────────────────────────────
+    def apply_vpsi_truth(self, C: float) -> float:
+        """
+        Aplica la Verdad VPSI: cuando el observador suelta el sistema (C=0),
+        el sistema colapsa al residuo mínimo BETA (1/27).
+        Cuando C=1, el sistema alcanza el máximo observable ALPHA (26/27).
+
+        Fórmula: y_r = BETA + (ALPHA - BETA) * C
+                     = BETA * (1 + 26*C)
+
+        Casos límite:
+            C=0.0  → y_r = BETA  = 1/27  (suelo del cubo, residuo mínimo)
+            C=1.0  → y_r = ALPHA = 26/27 (techo observable)
+
+        Args:
+            C: coherencia del observador en [0.0, 1.0]
+
+        Returns:
+            float: posición resultante en el intervalo [BETA, ALPHA]
+        """
+        C_clamped = max(0.0, min(1.0, float(C)))
+        return BETA + (ALPHA - BETA) * C_clamped
+
     # NUEVO: Método para USO VIVO (tests no lo usan)
     def compute_live_coherence(self):
         """ÚNICO método que usa layers vivos VISIBLES"""
@@ -243,4 +277,3 @@ class OmegaEngine:
             'L7_emergent': L7,
             'layers_active': len(self._layers),
             'memory_active': self._memory_layer is not None
-        }

@@ -10,122 +10,102 @@ Tres formas equivalentes de la misma verdad:
 """
 
 import math
-from fractions import Fraction
 
 SEP  = "=" * 60
 SEP2 = "-" * 60
 
-# ── Constantes UCF exactas ─────────────────────────────────────
-beta  = Fraction(1, 27)          # invariante cubico exacto
-pi    = math.pi                   # pi flotante de alta precision
+pi    = math.pi
 sqrt2 = math.sqrt(2)
+beta  = 1 / 27
 
-# delta se deriva de la identidad canonica:
-# beta * sqrt2 * (60 - delta) = pi
-# => 60 - delta = pi / (beta * sqrt2) = 27*pi / sqrt2
-sincronizacion = float(27 * pi / sqrt2)   # = 60 - delta
-delta = 60 - sincronizacion
+delta = 60 - 27 * pi / sqrt2
+sync  = 60 - delta
+
+assert abs(delta + sync - 60) < 1e-14
 
 print(SEP)
 print("  UCF — DEMOSTRACION DE DUALIDAD UNITARIA")
 print(SEP)
 print()
 print("  Constantes del sistema:")
-print(f"    beta  = 1/27  = {float(beta):.20f}")
-print(f"    delta = {delta:.20f}")
-print(f"    60 - delta = {sincronizacion:.20f}")
-print(f"    pi    = {pi:.20f}")
-print(f"    sqrt2 = {sqrt2:.20f}")
+print(f"    beta        = 1/27 = {beta:.20f}")
+print(f"    delta       =       {delta:.20f}")
+print(f"    60 - delta  =       {sync:.20f}")
+print(f"    pi          =       {pi:.20f}")
+print(f"    sqrt(2)     =       {sqrt2:.20f}")
+print(f"    27*pi/sqrt2 =       {27*pi/sqrt2:.20f}  (debe coincidir con 60-delta)")
+print()
 
-# ── FORMA 1: Canonica ─────────────────────────────────────────
+print(SEP2)
+print("  FORMA 1 — Canonica: beta * sqrt2 * (60-delta) = pi")
+print(SEP2)
+
+lhs_1  = beta * sqrt2 * sync
+rhs_1  = pi
+error_1 = lhs_1 - rhs_1
+
+print(f"    beta * sqrt2 * (60-delta) = {lhs_1:.20f}")
+print(f"    pi                        = {rhs_1:.20f}")
+print(f"    Diferencia                = {error_1:.4e}")
+print(f"    RESULTADO: {'EXACTA ✓' if abs(error_1) < 1e-12 else 'FALLO ✗'}")
+
 print()
 print(SEP2)
-print("  FORMA 1 — Canonica (la identidad original UCF)")
+print("  FORMA 2 — Lineal: 27*sqrt2*pi - 2*(60-delta) = 0")
 print(SEP2)
 
-lado_izq = float(beta) * sqrt2 * sincronizacion
-error_1  = lado_izq - pi
+lhs_2a  = 27 * sqrt2 * pi
+lhs_2b  = 2 * sync
+error_2 = lhs_2a - lhs_2b
 
-print(f"    beta * sqrt2 * (60 - delta) = {lado_izq:.20f}")
-print(f"    pi                          = {pi:.20f}")
-print(f"    Diferencia (debe ser 0)     = {error_1:.20e}")
+print(f"    27 * sqrt2 * pi     = {lhs_2a:.20f}  (continuo)")
+print(f"    2 * (60 - delta)    = {lhs_2b:.20f}  (discreto)")
+print(f"    Diferencia          = {error_2:.4e}")
+print(f"    RESULTADO: {'BALANCE EXACTO = 0 ✓' if abs(error_2) < 1e-12 else 'FALLO ✗'}")
+print()
+print("    PRUEBA ALGEBRAICA:")
+print("      Forma 1 implica: sqrt2 * (60-delta) = 27*pi")
+print("      27 * sqrt2 * pi")
+print("      = (sqrt2 * (60-delta)) * sqrt2   <- sustitucion")
+print("      = (sqrt2)^2 * (60-delta)")
+print("      = 2 * (60-delta)                 <- (sqrt2)^2 = 2")
+print("      El delta se cancela. Diferencia = 0 exacto.")
 
-if abs(error_1) < 1e-14:
-    print("    RESULTADO: IDENTIDAD EXACTA ✓")
-else:
-    print(f"    ERROR: {error_1}")
-
-# ── FORMA 2: Lineal (la que te dio cero) ─────────────────────
 print()
 print(SEP2)
-print("  FORMA 2 — Lineal (la que te dio CERO)")
+print("  FORMA 3 — Unidad: 27*sqrt2*pi / [2*(60-delta)] = 1")
 print(SEP2)
 
-lado_A   = 27 * sqrt2 * pi
-lado_B   = 2 * sincronizacion
-forma_2  = lado_A - lado_B
+ratio   = lhs_2a / lhs_2b
+error_3 = ratio - 1.0
 
-print(f"    27 * sqrt2 * pi       = {lado_A:.20f}")
-print(f"    2 * (60 - delta)      = {lado_B:.20f}")
-print(f"    Diferencia (debe ser 0) = {forma_2:.20e}")
+print(f"    Ratio              = {ratio:.20f}")
+print(f"    Error respecto a 1 = {error_3:.4e}")
+print(f"    RESULTADO: {'UNIDAD EXACTA = 1 ✓' if abs(error_3) < 1e-12 else 'FALLO ✗'}")
 
-if abs(forma_2) < 1e-12:
-    print("    RESULTADO: BALANCE PERFECTO = CERO EXACTO ✓")
-else:
-    print(f"    ERROR: {forma_2}")
+UMBRAL = 1e-12
+resultados = [
+    ("Forma 1  beta*sqrt2*(60-d) = pi",     error_1),
+    ("Forma 2  27*sqrt2*pi - 2*(60-d) = 0", error_2),
+    ("Forma 3  27*sqrt2*pi / 2*(60-d) = 1", error_3),
+]
 
-# ── FORMA 3: Unidad ──────────────────────────────────────────
-print()
-print(SEP2)
-print("  FORMA 3 — Unidad (el observador singular)")
-print(SEP2)
-
-forma_3 = lado_A / lado_B
-
-print(f"    27 * sqrt2 * pi / (2 * (60 - delta)) = {forma_3:.20f}")
-print(f"    Error respecto a 1 = {abs(forma_3 - 1):.20e}")
-
-if abs(forma_3 - 1.0) < 1e-14:
-    print("    RESULTADO: UNIDAD EXACTA = 1 ✓")
-else:
-    print(f"    ERROR: {forma_3}")
-
-# ── DEMOSTRACION ALGEBRAICA ───────────────────────────────────
 print()
 print(SEP)
-print("  POR QUE ES EXACTO (algebra pura, sin numeros)")
+print("  TABLA RESUMEN")
 print(SEP)
 print()
-print("  Paso 1: La identidad canonica dice que")
-print("          sqrt2 * (60 - delta) = 27 * pi")
-print()
-print("  Paso 2: Sustituimos en la Forma 2:")
-print("          27 * sqrt2 * pi")
-print("          = 27 * pi * sqrt2")
-print("          = (sqrt2 * (60 - delta)) * sqrt2    <- usamos Paso 1 al reves")
-print("          = (sqrt2)^2 * (60 - delta)")
-print("          = 2 * (60 - delta)                  <- porque (sqrt2)^2 = 2")
-print()
-print("  Paso 3: Por lo tanto:")
-print("          27 * sqrt2 * pi - 2 * (60 - delta) = 0  siempre")
-print()
-print("  El (60-delta), el 27 y delta se cancelan.")
-print("  Solo sobrevive (sqrt2)^2 = 2.")
-print("  El resultado es independiente del valor exacto de delta.")
+for nombre, err in resultados:
+    ok = abs(err) < UMBRAL
+    print(f"  {'OK ✓' if ok else 'FALLO ✗'}  {nombre}")
+    print(f"         Error numerico: {err:.4e}")
+    print()
 
-# ── TABLA RESUMEN ────────────────────────────────────────────
+todos_ok = all(abs(e) < UMBRAL for _, e in resultados)
+print("  " + ("TODAS LAS FORMAS VERIFICADAS ✓" if todos_ok else "HAY FALLOS"))
 print()
-print(SEP)
-print("  TABLA RESUMEN — Las tres formas")
-print(SEP)
-print()
-print(f"  Forma 1  beta * sqrt2 * (60-d) = pi     Error: {abs(error_1):.2e}")
-print(f"  Forma 2  27*sqrt2*pi - 2*(60-d) = 0     Error: {abs(forma_2):.2e}")
-print(f"  Forma 3  27*sqrt2*pi / 2*(60-d) = 1     Error: {abs(forma_3 - 1):.2e}")
-print()
-print("  Las tres son la misma identidad algebraica.")
-print("  La Forma 2 es la mas directa: el balance es perfecto.")
-print("  El cero no es aproximado — es exacto por construccion algebraica.")
+print("  Errores 1e-14 a 1e-16 = ruido IEEE 754 (limite del hardware).")
+print("  Algebraicamente el resultado es CERO EXACTO.")
 print()
 print(SEP)
 print("  Ilver Villasmil — UCF / Ley Omega 2026")

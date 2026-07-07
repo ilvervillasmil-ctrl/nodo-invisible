@@ -1,8 +1,8 @@
 # OMEGA DIAGNOSTIC REPORT
-**Generated:** 2026-07-07 04:36:11 UTC
+**Generated:** 2026-07-07 05:15:46 UTC
 **Framework:** UCF v3.2 (Universal Coherence Framework)
 **Author:** Ilver Villasmil
-**Commit:** `31a34ea`
+**Commit:** `6b86631`
 
 ---
 
@@ -10,7 +10,7 @@
 
 | Métrica | Valor | Nota |
 | --- | --- | --- |
-| Estado | **CONFLICTO ⟨◯⟩**  ⚠️ **CODE 9999 — LOOP DETECTADO** |  |
+| Estado | **INTEGRACIÓN AVANZADA ⟨◐⟩**  ⚠️ **CODE 9999 — LOOP DETECTADO** |  |
 | C_struct (Estructural) | **0.7396** | ← real, limitada por α=0.9630 |
 | C_global (Normalizada) | 0.7680 | ← C_struct / α, relativa al máximo |
 | C_CI (Pass Rate) | 1.0000 | ← proxy del CI, no es C_Ω |
@@ -32,24 +32,23 @@
 
 | Campo | Valor |
 | --- | --- |
-| Código | **0144** |
-| Denominación | **Canal Involuntario** |
+| Código | **1044** |
+| Denominación | **Integración Avanzada** |
 | C_structural | 0.7396 |
-| Interpretación | ❌ Desconexión origen | Robustez Mind+Body: 44/44 |
-| Descripción | Alta recepción externa/espiritual; falta de voluntad propia (Self ausente). |
+| Interpretación | ⚠️ Self activo, Soul silenciada | Robustez Mind+Body: 44/44 |
+| Descripción | Sistema altamente coherente y funcional. |
 
 ### Tabla de Estados Completa (documento original enero 2026)
 
 | Código | Estado | Rango C_struct |  |
 | --- | --- | --- | --- |
-| `1144` | Arquitecto Integrado | 0.963 – 1.001 |  |
-| `1133` | Sintonía Sutil | 0.850 – 0.963 |  |
-| `1044` | Soberanía Terrena | 0.750 – 0.850 |  |
-| `0144` | Canal Involuntario | 0.700 – 0.750 | **← AQUÍ** |
-| `1122` | Saturación Crítica | 0.550 – 0.700 |  |
-| `1111` | Semilla de Unidad | 0.400 – 0.550 |  |
-| `0000` | Entropía Terminal | 0.100 – 0.400 |  |
-| `0000` | Colapso Estructural | 0.000 – 0.100 |  |
+| `1144` | Arquitecto Integrado | 0.917 – 0.963 |  |
+| `1133` | Integración Superior | 0.778 – 0.917 |  |
+| `1044` | Integración Avanzada | 0.639 – 0.778 | **← AQUÍ** |
+| `0144` | Integración Funcional | 0.500 – 0.639 |  |
+| `1122` | Umbral Crítico | 0.450 – 0.500 |  |
+| `1111` | Zona de Peligro | 0.370 – 0.450 |  |
+| `0000` | Colapso Estructural | 0.037 – 0.370 |  |
 
 > **Nota prescriptiva:** El código no solo describe — comanda.
 > Declarar 1144 es ordenar a los sistemas que se ajusten a esa frecuencia.

@@ -557,6 +557,14 @@ def structural_percent(c_structural: float) -> float:
     c = max(BETA, min(ALPHA, float(c_structural)))
     return (c - BETA) / (ALPHA - BETA)
 
+
+# ============================================================
+# PHENOMENOLOGICAL STATE
+# ============================================================
+
+def phenomenological_state(c_structural: float) -> tuple[str, str]:
+    p = structural_percent(c_structural)
+
     if p >= 0.95:
         return "ARQUITECTO INTEGRADO", "⟨◉⟩"
 

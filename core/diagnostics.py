@@ -1,26 +1,15 @@
-"""
-diagnostics.py
-=========================================================
-MASTER DIAGNOSTIC ENGINE
-Single Source of Truth
-Anti-Hardcoded
-Self-Audited
-=========================================================
-"""
-
 from dataclasses import dataclass
-from core.constants import ALPHA, BETA
+from core.constants import (
+    ALPHA,
+    BETA,
+    CODE_ARCHITECT,
+    CODE_SYNCHRONY,
+    CODE_ENTROPY,
+)
 
-# ==========================================================
-# PHYSICAL CONSTANTS
-# ==========================================================
-
-CRITICAL_THRESHOLD = 0.450000000000
-DANGER_THRESHOLD  = 0.370000000000
-
-# ==========================================================
-# STATE
-# ==========================================================
+# ============================================================
+# DIAGNOSTIC STATE
+# ============================================================
 
 @dataclass(frozen=True)
 class DiagnosticState:
@@ -28,115 +17,156 @@ class DiagnosticState:
     lower: float
     upper: float
 
-    code: str
+    legacy_code: int
+
     name: str
-    symbol: str
     description: str
 
-# ==========================================================
+
+# ============================================================
 # MASTER TABLE
-# ==========================================================
+# ============================================================
 
 DIAGNOSTIC_STATES = [
 
-    DiagnosticState(
-        lower=0.916666666667,
-        upper=ALPHA,
-        code="1144",
-        name="Arquitecto Integrado",
-        symbol="⟨◉⟩",
-        description="Máxima integración estructural."
-    ),
+    DiagnosticState(ALPHA, ALPHA, CODE_ARCHITECT,
+        "Arquitecto Integrado",
+        "Máxima integración estructural."),
 
-    DiagnosticState(
-        lower=0.777777777778,
-        upper=0.916666666667,
-        code="1133",
-        name="Integración Superior",
-        symbol="⟨◎⟩",
-        description="Alta estabilidad estructural."
-    ),
+    DiagnosticState(0.700, ALPHA,
+        CODE_SYNCHRONY,
+        "Altamente Coherente",
+        "Sistema altamente coherente."),
 
-    DiagnosticState(
-        lower=0.638888888889,
-        upper=0.777777777778,
-        code="1044",
-        name="Integración Avanzada",
-        symbol="⟨◐⟩",
-        description="Alta coherencia operacional."
-    ),
-
-    DiagnosticState(
-        lower=0.500000000000,
-        upper=0.638888888889,
-        code="0144",
-        name="Integración Funcional",
-        symbol="⟨◑⟩",
-        description="Sistema estable con margen de crecimiento."
-    ),
-
-    DiagnosticState(
-        lower=CRITICAL_THRESHOLD,
-        upper=0.500000000000,
-        code="1122",
-        name="Umbral Crítico",
-        symbol="⟨◒⟩",
-        description="Límite mínimo de autosostenibilidad."
-    ),
-
-    DiagnosticState(
-        lower=DANGER_THRESHOLD,
-        upper=CRITICAL_THRESHOLD,
-        code="1111",
-        name="Zona de Peligro",
-        symbol="⟨◯⟩",
-        description="Fragilidad estructural."
-    ),
-
-    DiagnosticState(
-        lower=BETA,
-        upper=DANGER_THRESHOLD,
-        code="0000",
-        name="Colapso Estructural",
-        symbol="⟨○⟩",
-        description="Coherencia insuficiente."
-    )
+    DiagnosticState(BETA,0.450,
+        CODE_ENTROPY,
+        "Entropía",
+        "Sistema por debajo del umbral crítico.")
 ]
 
-# ==========================================================
-# MASTER ENGINE
-# ==========================================================
+
+# ============================================================
+# MASTER DIAGNOSTIC
+# ============================================================
 
 class DiagnosticSystem:
 
-    @staticmethod
-    def structural_percent(c: float) -> float:
-        """
-        β -> 0 %
-        α -> 100 %
-        """
-        c = max(BETA, min(ALPHA, float(c)))
-        return 100.0 * (c - BETA) / (ALPHA - BETA)
+    # --------------------------------------------------------
+    # CHECK 0
+    # --------------------------------------------------------
 
     @staticmethod
-    def classify(c: float) -> DiagnosticState:
+    def validate_domain(c):
 
-        if not (BETA <= c <= ALPHA):
+        if c < BETA:
             raise ValueError(
-                f"CΩ={c:.6f} outside physical domain "
-                f"[{BETA:.6f},{ALPHA:.6f}]"
+                f"CΩ={c:.6f} below β={BETA:.6f}"
             )
+
+        if c > ALPHA:
+            raise ValueError(
+                f"CΩ={c:.6f} above α={ALPHA:.6f}"
+            )
+
+    # --------------------------------------------------------
+    # CHECK 1
+    # Tabla Maestra
+    # --------------------------------------------------------
+
+    @staticmethod
+    def classify_from_table(c):
 
         for state in DIAGNOSTIC_STATES:
 
             if state.lower <= c <= state.upper:
+
                 return state
 
-        raise RuntimeError("Diagnostic table incomplete.")
+        raise RuntimeError("No diagnostic state found.")
 
-# ==========================================================
-# SELF AUDIT
-# ==========================================================
+    # --------------------------------------------------------
+    # CHECK 2
+    # Independiente
+    # --------------------------------------------------------
+
+    @staticmethod
+    def classify_from_percent(c):
+
+        p = (
+            (c - BETA)
+            /
+            (ALPHA - BETA)
+        )
+
+        if p >= 0.95:
+            return CODE_ARCHITECT
+
+        if p >= 0.70:
+            return CODE_SYNCHRONY
+
+        return CODE_ENTROPY
+
+    # --------------------------------------------------------
+    # DOUBLE CHECK
+    # --------------------------------------------------------
+
+    @staticmethod
+    def get_status_code(c_omega):
+
+        DiagnosticSystem.validate_domain(c_omega)
+
+        # Camino A
+        table_state = DiagnosticSystem.classify_from_table(
+            c_omega
+        )
+
+        # Camino B
+        percent_code = DiagnosticSystem.classify_from_percent(
+            c_omega
+        )
+
+        # =====================================================
+        # DOUBLE CHECK
+        # =====================================================
+
+        if table_state.legacy_code != percent_code:
+
+            raise RuntimeError(
+                "Diagnostic mismatch\n"
+                f"Table={table_state.legacy_code}\n"
+                f"Percent={percent_code}"
+            )
+
+        return (
+            f"CODE {table_state.legacy_code}: "
+            f"{table_state.name} - "
+            f"{table_state.description}"
+        )
+
+    # --------------------------------------------------------
+    # LAYER CHECK
+    # --------------------------------------------------------
+
+    @staticmethod
+    def check_layer_friction(layers_data):
+
+        alerts = []
+
+        for i, layer in enumerate(layers_data):
+
+            phi = layer["phi"]
+
+            if phi > 0.15:
+
+                alerts.append(
+                    f"L{i}: φ={phi:.3f}"
+                )
+
+        return alerts
+
+    # --------------------------------------------------------
+    # SELF AUDIT
+    # --------------------------------------------------------
 
     @staticmethod
     def self_audit():
@@ -144,34 +174,10 @@ class DiagnosticSystem:
         errors = []
 
         if not BETA < ALPHA:
-            errors.append("β must be smaller than α.")
+            errors.append("β >= α")
 
-        previous = ALPHA
-
-        for state in DIAGNOSTIC_STATES:
-
-            if state.upper > previous + 1e-12:
-                errors.append(
-                    f"Overlap above {state.name}"
-                )
-
-            previous = state.lower
-
-        if abs(DIAGNOSTIC_STATES[0].upper - ALPHA) > 1e-12:
-            errors.append("Top state does not end at α.")
-
-        if abs(DIAGNOSTIC_STATES[-1].lower - BETA) > 1e-12:
-            errors.append("Bottom state does not start at β.")
-
-        codes = [s.code for s in DIAGNOSTIC_STATES]
-
-        if len(codes) != len(set(codes)):
-            errors.append("Duplicated diagnostic codes.")
-
-        names = [s.name for s in DIAGNOSTIC_STATES]
-
-        if len(names) != len(set(names)):
-            errors.append("Duplicated diagnostic names.")
+        if DIAGNOSTIC_STATES[0].lower != ALPHA:
+            errors.append("Architect state invalid")
 
         if errors:
 

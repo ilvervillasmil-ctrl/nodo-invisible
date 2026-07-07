@@ -543,12 +543,19 @@ def diagnostic_vector_interpretation(code: str) -> str:
     return f"{origin} | {manifest}"
 
 
-# =============================================================================
-# PHENOMENOLOGICAL STATE
-# =============================================================================
+# ============================================================
+# STRUCTURAL NORMALIZATION
+# ============================================================
 
-def phenomenological_state(c_structural: float) -> tuple[str, str]:
-    p = structural_percent(c_structural)
+def structural_percent(c_structural: float) -> float:
+    """
+    Convierte CΩ al porcentaje del dominio físico [β, α].
+
+    β  ->   0 %
+    α  -> 100 %
+    """
+    c = max(BETA, min(ALPHA, float(c_structural)))
+    return (c - BETA) / (ALPHA - BETA)
 
     if p >= 0.95:
         return "ARQUITECTO INTEGRADO", "⟨◉⟩"

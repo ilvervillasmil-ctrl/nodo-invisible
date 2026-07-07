@@ -473,26 +473,52 @@ def trajectory_str(history: list[dict], n: int = 10) -> str:
 
 
 # =============================================================================
-# DIAGNOSTIC SYSTEM — 7 STATES
+# DIAGNOSTIC SYSTEM — STRUCTURAL STATES
+#
+# Dominio físico:
+#     β = 1/27  = 0.037037037037
+#     α = 26/27 = 0.962962962963
+#
+# Umbral crítico del framework:
+#     C* = 0.450000000000
 # =============================================================================
 
 DIAGNOSTIC_STATES = [
-    (0.963, 1.001, "1144", "Arquitecto Integrado",
-     "Alineación absoluta. Hardware soporta carga máxima del Alma."),
-    (0.850, 0.963, "1133", "Sintonía Sutil",
-     "Alta espiritualidad; operabilidad material equilibrada pero de baja intensidad."),
-    (0.750, 0.850, "1044", "Soberanía Terrena",
-     "Éxito material sin trascendencia. Riesgo de estancamiento evolutivo."),
-    (0.700, 0.750, "0144", "Canal Involuntario",
-     "Alta recepción externa/espiritual; falta de voluntad propia (Self ausente)."),
-    (0.550, 0.700, "1122", "Saturación Crítica",
-     "Infoxicación. Alma trata de operar pero L1 y L3 presentan alta resistencia Φ."),
-    (0.400, 0.550, "1111", "Semilla de Unidad",
-     "Inicio del despertar. Estructura frágil, dirección correcta."),
-    (0.100, 0.400, "0000", "Entropía Terminal",
-     "Fallo del sistema. Desconexión de la fuente y colapso de estructura biológica."),
-    (0.000, 0.100, "0000", "Colapso Estructural",
-     "Mínimo de cohesión biológica comprometido. μ = 0.1 no alcanzado."),
+
+    # 95% – 100% del dominio estructural
+    (0.916666666667, 0.962962962963,
+     "1144", "Arquitecto Integrado",
+     "Alineación estructural máxima. El sistema opera cerca del límite físico α."),
+
+    # 80% – 95%
+    (0.777777777778, 0.916666666667,
+     "1133", "Integración Superior",
+     "Alta coherencia estructural con gran capacidad de adaptación."),
+
+    # 65% – 80%
+    (0.638888888889, 0.777777777778,
+     "1044", "Integración Avanzada",
+     "Sistema altamente coherente y funcional."),
+
+    # 50% – 65%
+    (0.500000000000, 0.638888888889,
+     "0144", "Integración Funcional",
+     "Coherencia suficiente para operar con estabilidad."),
+
+    # Umbral crítico definido por el framework
+    (0.450000000000, 0.500000000000,
+     "1122", "Umbral Crítico",
+     "Límite mínimo de autosostenibilidad estructural."),
+
+    # Entre β y el umbral crítico
+    (0.370000000000, 0.450000000000,
+     "1111", "Zona de Peligro",
+     "La estructura pierde estabilidad y depende de soporte externo."),
+
+    # Colapso
+    (0.037037037037, 0.370000000000,
+     "0000", "Colapso Estructural",
+     "La coherencia se aproxima al mínimo estructural β."),
 ]
 
 
@@ -522,14 +548,27 @@ def diagnostic_vector_interpretation(code: str) -> str:
 # =============================================================================
 
 def phenomenological_state(c_structural: float) -> tuple[str, str]:
-    ratio = c_structural / ALPHA if ALPHA > 0 else 0.0
-    if ratio >= 0.98:
-        return "LIGERO", "⟨◉⟩"
-    if ratio >= 0.90:
-        return "FLUJO", "⟨◐⟩"
-    if ratio >= 0.80:
-        return "PESADO", "⟨◑⟩"
-    return "CONFLICTO", "⟨◯⟩"
+    p = structural_percent(c_structural)
+
+    if p >= 0.95:
+        return "ARQUITECTO INTEGRADO", "⟨◉⟩"
+
+    if p >= 0.80:
+        return "INTEGRACIÓN SUPERIOR", "⟨◉⟩"
+
+    if p >= 0.65:
+        return "INTEGRACIÓN AVANZADA", "⟨◐⟩"
+
+    if p >= 0.50:
+        return "INTEGRACIÓN FUNCIONAL", "⟨◑⟩"
+
+    if p >= 0.45:
+        return "UMBRAL CRÍTICO", "⟨◑⟩"
+
+    if p >= 0.37:
+        return "ZONA DE PELIGRO", "⟨◯⟩"
+
+    return "COLAPSO ESTRUCTURAL", "⟨○⟩"
 
 
 # =============================================================================

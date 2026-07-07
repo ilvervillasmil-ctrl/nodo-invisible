@@ -1,11 +1,11 @@
-from core.constants import CODE_ARCHITECT, CODE_SYNCHRONY, CODE_ENTROPY
+from core.constants import ALPHA, CODE_ARCHITECT, CODE_SYNCHRONY, CODE_ENTROPY
 
 class DiagnosticSystem:
     @staticmethod
     def get_status_code(c_omega: float) -> str:
-        if c_omega >= 0.963:
+        if c_omega ALPHA = 26/27 = 0.962962962962...
             return f"CODE {CODE_ARCHITECT}: ARCHITECT INTEGRATED - Maximum Coherence."
-        elif c_omega >= 0.55:
+        elif c_omega >= 0.78:
             return f"CODE {CODE_SYNCHRONY}: CRITICAL SATURATION - Interaction Required."
         elif c_omega < 0.10:
             return f"CODE {CODE_ENTROPY}: TERMINAL ENTROPY - Reset Recommended."

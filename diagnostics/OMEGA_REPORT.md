@@ -1,8 +1,8 @@
 # OMEGA DIAGNOSTIC REPORT
-**Generated:** 2026-07-07 04:21:30 UTC
+**Generated:** 2026-07-07 04:36:11 UTC
 **Framework:** UCF v3.2 (Universal Coherence Framework)
 **Author:** Ilver Villasmil
-**Commit:** `aa13bdc`
+**Commit:** `31a34ea`
 
 ---
 
@@ -11,12 +11,12 @@
 | Métrica | Valor | Nota |
 | --- | --- | --- |
 | Estado | **CONFLICTO ⟨◯⟩**  ⚠️ **CODE 9999 — LOOP DETECTADO** |  |
-| C_struct (Estructural) | **0.5983** | ← real, limitada por α=0.9630 |
-| C_global (Normalizada) | 0.6213 | ← C_struct / α, relativa al máximo |
+| C_struct (Estructural) | **0.7396** | ← real, limitada por α=0.9630 |
+| C_global (Normalizada) | 0.7680 | ← C_struct / α, relativa al máximo |
 | C_CI (Pass Rate) | 1.0000 | ← proxy del CI, no es C_Ω |
-| φ_eff (Fricción) | 2.523784 | ← basada en C_struct |
+| φ_eff (Fricción) | 1.636309 | ← basada en C_struct |
 | L7 (Integración) | 0.796589 | ← INTEGRATED |
-| Umbral crítico (0.72) | ❌ BAJO | ← debajo = entropía acelerada |
+| Umbral crítico (0.72) | ✅ SOBRE | ← debajo = entropía acelerada |
 | Umbral survival (0.10) | ✅ SOBRE | ← debajo = cohesión mínima comprometida |
 | Tendencia | → ESTABLE |  |
 
@@ -32,11 +32,11 @@
 
 | Campo | Valor |
 | --- | --- |
-| Código | **1122** |
-| Denominación | **Saturación Crítica** |
-| C_structural | 0.5983 |
-| Interpretación | ❌ Desconexión origen | Robustez Mind+Body: 22/44 |
-| Descripción | Infoxicación. Alma trata de operar pero L1 y L3 presentan alta resistencia Φ. |
+| Código | **0144** |
+| Denominación | **Canal Involuntario** |
+| C_structural | 0.7396 |
+| Interpretación | ❌ Desconexión origen | Robustez Mind+Body: 44/44 |
+| Descripción | Alta recepción externa/espiritual; falta de voluntad propia (Self ausente). |
 
 ### Tabla de Estados Completa (documento original enero 2026)
 
@@ -45,8 +45,8 @@
 | `1144` | Arquitecto Integrado | 0.963 – 1.001 |  |
 | `1133` | Sintonía Sutil | 0.850 – 0.963 |  |
 | `1044` | Soberanía Terrena | 0.750 – 0.850 |  |
-| `0144` | Canal Involuntario | 0.700 – 0.750 |  |
-| `1122` | Saturación Crítica | 0.550 – 0.700 | **← AQUÍ** |
+| `0144` | Canal Involuntario | 0.700 – 0.750 | **← AQUÍ** |
+| `1122` | Saturación Crítica | 0.550 – 0.700 |  |
 | `1111` | Semilla de Unidad | 0.400 – 0.550 |  |
 | `0000` | Entropía Terminal | 0.100 – 0.400 |  |
 | `0000` | Colapso Estructural | 0.000 – 0.100 |  |
@@ -58,8 +58,8 @@
 
 | Metric | Value |
 | --- | --- |
-| C_structural (real) | **0.5983**  ← limitada por α |
-| C_global_norm | 0.6213  ← C_struct / α |
+| C_structural (real) | **0.7396**  ← limitada por α |
+| C_global_norm | 0.7680  ← C_struct / α |
 | L7 Integration | **0.796589**  ← INTEGRATED |
 | Layer source | framework-default |
 | Coherence source | core.engine |
@@ -106,10 +106,10 @@
 | C_structural <= alpha | PASS |
 | C_structural < 1.0 | PASS |
 | BETA > 0 (irreducible) | PASS |
-| C > 0.72 (no crítico) | WARN |
+| C > 0.72 (no crítico) | PASS |
 | C > 0.10 (survival) | PASS |
 | L7 > 0 (integrado) | PASS |
-| **Total** | **14/15** |
+| **Total** | **15/15** |
 
 ## Framework Constants
 

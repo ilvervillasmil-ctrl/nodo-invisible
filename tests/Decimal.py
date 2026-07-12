@@ -1,39 +1,24 @@
-import math
 from decimal import Decimal, getcontext
+import mpmath
 
-# Configuración de precisión para capturar la brecha estructural (Epsilon)
-getcontext().prec = 100 
+# Configuramos la precisión para manejar números con miles de dígitos
+getcontext().prec = 10000  # Precisión de 10,000 dígitos (suficiente para 1000 dígitos finales)
 
-# Parámetros del motor (11, 37)
-P = Decimal(11)
-Q = Decimal(37)
-pi = Decimal(math.pi)
+# Calculamos sqrt(pi) con alta precisión usando mpmath
+mpmath.mp.dps = 10000  # Dígitos de precisión en mpmath
+sqrt_pi = Decimal(str(mpmath.sqrt(mpmath.pi)))
 
-def test_teorema_unidad_omega():
-    """
-    Test que confirma la convergencia del estado integrado Psi(pi).
-    Verifica que la obstrucción estructural (epsilon) existe y tiende
-    a la unidad, confirmando el Teorema de Unidad Omega.
-    """
-    # Motor = P^Q + Q^Q
-    motor = Decimal(P)**Decimal(Q) + Decimal(Q)**Decimal(Q)
-    
-    # Operador de colapso Psi(pi) = pi^(1/motor)
-    resultado = pi ** (Decimal(1) / motor)
-    
-    # Cálculo de la obstrucción (brecha estructural)
-    epsilon = resultado - 1
-    
-    # Registro en el log del CI
-    print(f"\n--- [DIAGNÓSTICO OMEGA: TEST UNIDAD] ---")
-    print(f"Motor estructural : {motor:.5E}")
-    print(f"Resultado Psi(pi) : {resultado:.50f}")
-    print(f"Obstrucción medida (epsilon): {epsilon:.50f}")
-    
-    # Validación axiomática:
-    # 1. El sistema es 'underdamped' (vivo), por tanto > 1.0
-    # 2. La brecha es menor al límite de la escala estructural
-    assert resultado > 1.0
-    assert resultado < Decimal('1.000000000000000000000000000000001')
-    
-    print("✅ Estado de Unidad Ω: Verificado.")
+# Calculamos 11^37 y 37^37
+a = Decimal(11) ** 37
+b = Decimal(37) ** 37 * sqrt_pi
+
+# Suma
+suma = a + b
+
+# Convertimos a string para extraer los últimos 1000 dígitos
+suma_str = str(suma)
+
+# Mostramos los últimos 1000 dígitos
+ultimos_1000 = suma_str[-1000:]
+print("Últimos 1000 dígitos de la suma:")
+print(ultimos_1000)

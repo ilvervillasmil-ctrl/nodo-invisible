@@ -1,68 +1,69 @@
+# tests/test_identidad_fermat_pi.py
+
 """
-Teorema 8: Identidad Estructural Fermat-Pi
-
-Verifica que ((11^37 + 37^37)^(1/37)) / sqrt(pi) = 1
-
-Autor: Ilver Villasmil
-Framework: Villasmil-Omega (UCF v3.4)
-Axiomas: 1 (cubo), 4 (base decimal), 6 (proyección decimal)
+Test del Teorema 8: Identidad Estructural Fermat-Pi
 """
 
 import math
+import pytest
 
 # ======================================================================
 # PARÁMETROS ESTRUCTURALES
 # ======================================================================
 
-CUBO_TOTAL = 27           # |C| = 3^3 (Axioma 1)
-DECIMAL_BASE = 10         # |D| = 10 (Axioma 4)
-Q = CUBO_TOTAL + DECIMAL_BASE  # 37: número estructural
-P = DECIMAL_BASE + 1      # 11: observador + unidad
+CUBO_TOTAL = 27
+DECIMAL_BASE = 10
+Q = CUBO_TOTAL + DECIMAL_BASE  # 37
+P = DECIMAL_BASE + 1           # 11
+EPSILON = 1e-12
 
 # ======================================================================
-# TEOREMA 8: IDENTIDAD ESTRUCTURAL
+# FUNCIÓN PRINCIPAL
 # ======================================================================
 
 def teorema_fermat_pi() -> float:
-    """
-    Retorna el valor de la identidad estructural:
-    ((P^Q + Q^Q)^(1/Q)) / sqrt(pi)
+    """Retorna ((P^Q + Q^Q)^(1/Q)) / sqrt(pi)"""
+    raiz_q = (P**Q + Q**Q) ** (1/Q)
+    return raiz_q / math.sqrt(math.pi)
+
+# ======================================================================
+# TESTS
+# ======================================================================
+
+def test_teorema_fermat_pi():
+    """Verifica la identidad estructural"""
+    resultado = teorema_fermat_pi()
+    assert abs(resultado - 1.0) < EPSILON, \
+        f"Teorema falló: {resultado} != 1"
+
+def test_raiz_q_es_sqrt_pi():
+    """Verifica que la raíz Q-ésima es sqrt(pi)"""
+    raiz = (P**Q + Q**Q) ** (1/Q)
+    assert abs(raiz - math.sqrt(math.pi)) < EPSILON, \
+        f"Raíz: {raiz} != sqrt(pi)"
+
+def test_pi_es_cierre():
+    """Verifica que pi se obtiene del cierre"""
+    pi_cerrado = (P**Q + Q**Q) ** (2/Q)
+    assert abs(pi_cerrado - math.pi) < EPSILON, \
+        f"π cerrado: {pi_cerrado} != π"
+
+def test_parametros_estructurales():
+    """Verifica que los parámetros son estructurales"""
+    assert Q == 37, f"Q debe ser 37, es {Q}"
+    assert P == 11, f"P debe ser 11, es {P}"
+    assert Q == CUBO_TOTAL + DECIMAL_BASE
+    assert P == DECIMAL_BASE + 1
+
+def test_primalidad():
+    """Verifica que P y Q son primos"""
+    def es_primo(n):
+        if n < 2:
+            return False
+        for i in range(2, int(n**0.5) + 1):
+            if n % i == 0:
+                return False
+        return True
     
-    Returns:
-        1.0 (dentro de la tolerancia numérica)
-    """
-    resultado = ((P**Q + Q**Q)**(1/Q)) / math.sqrt(math.pi)
-    return resultado
-
-# ======================================================================
-# VERIFICACIÓN ESTRUCTURAL
-# ======================================================================
-
-EPSILON_TEOREMA = 1e-12
-
-assert abs(teorema_fermat_pi() - 1.0) < EPSILON_TEOREMA, \
-    "El Teorema 8 no se cumple"
-
-print(f"✅ Teorema 8 verificado: {teorema_fermat_pi()} = 1")
-
-# ======================================================================
-# COROLARIOS
-# ======================================================================
-
-def corolario_8_1():
-    """La raíz Q-ésima es el operador de proyección"""
-    raiz = (P**Q + Q**Q)**(1/Q)
-    assert abs(raiz - math.sqrt(math.pi)) < EPSILON_TEOREMA
-    return raiz
-
-def corolario_8_2():
-    """π como cierre del sistema"""
-    pi_cerrado = (P**Q + Q**Q)**(2/Q)
-    assert abs(pi_cerrado - math.pi) < EPSILON_TEOREMA
-    return pi_cerrado
-
-def corolario_8_3():
-    """La unidad estructural"""
-    unidad = (P**Q + Q**Q)**(1/Q) / math.sqrt(math.pi)
-    assert abs(unidad - 1.0) < EPSILON_TEOREMA
-    return unidad
+    assert es_primo(P), f"{P} no es primo"
+    assert es_primo(Q), f"{Q} no es primo"

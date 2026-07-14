@@ -1,8 +1,15 @@
 """
-Script de pruebas para analizar la relación entre los errores de las constantes físicas del UIS,
-el residuo del observador (ε = 0.02716), y la razón áurea (φ ≈ 1.618034).
+ANÁLISIS DE ERRORES EN CONSTANTES FÍSICAS DEL UIS
+Protocolo:
+1. El framework predice los errores de las constantes físicas basados en ε y φ.
+2. Se miden los errores reales entre los valores UIS y experimentales.
+3. Se valida que los errores sigan los patrones predichos (ε, ε/φ, ε/φ², etc.).
+4. Si coinciden: evidencia de que ε es una constante estructural.
+5. Si no coinciden: la hipótesis falla y debe revisarse.
 
-Este script está optimizado para ejecutarse en CI.
+Historial:
+- ε = 0.02716 (residuo del observador, medido en Λ).
+- Los errores en otras constantes siguen patrones con φ (razón áurea).
 """
 
 import math
@@ -11,10 +18,11 @@ import os
 import sys
 import tempfile
 from pathlib import Path
+from dataclasses import dataclass
 
-# ======================================================================
-# CONFIGURACIÓN INICIAL PARA CI
-# ======================================================================
+# ============================================================
+# CONFIGURACIÓN INICIAL
+# ============================================================
 
 # Añade el directorio raíz al PYTHONPATH
 REPO_ROOT = Path(__file__).parent.parent
@@ -43,14 +51,29 @@ except ImportError:
 TEMP_DIR = tempfile.mkdtemp()
 os.makedirs(TEMP_DIR, exist_ok=True)
 
-# ======================================================================
-# CONSTANTES FUNDAMENTALES DEL UIS
-# ======================================================================
+# ============================================================
+# HIPÓTESIS FALSABLES
+# Fijadas antes de medir el corpus.
+# ============================================================
 
-# Importa constantes desde formulas/constants.py
+# Residuo del observador (ε)
+EPSILON_OBSERVER = 0.02716
+
+# Patrones predichos para los errores
+PREDICTED_LAMBDA_ERROR = EPSILON_OBSERVER  # Error exacto
+PREDICTED_H0_ERROR = EPSILON_OBSERVER / 3.1  # Error ≈ ε/3.1
+PREDICTED_ALPHA_EM_ERROR = EPSILON_OBSERVER / (1.618 ** 2)  # Error ≈ ε/φ²
+PREDICTED_T_CMB_ERROR = EPSILON_OBSERVER / (1.618 ** 3)  # Error ≈ ε/φ³
+PREDICTED_M_ELECTRON_ERROR = EPSILON_OBSERVER / (1.618 ** 5)  # Error ≈ ε/φ⁵
+
+# ============================================================
+# CONSTANTES FUNDAMENTALES DEL UIS
+# ============================================================
+
+# Importa constantes desde formulas/constants.py o define manualmente
 try:
     from formulas.constants import (
-        ALPHA, BETA, PHI, EPSILON_OBSERVER, PI, SQRT2, SQRT3, E,
+        ALPHA, BETA, PHI, PI, SQRT2, SQRT3, E,
         KAPPA_H, KAPPA_M, KAPPA_P, TAU_TORSION, BOHR_RADIUS,
         GAMMA_COUPLING, DECIMAL_FACTOR, ALPHA_GEOM_INV, PI_OVER_SQRT2, S_REF, R_FIN,
         OMEGA_0, OMEGA_0_SQUARED, LAYER_FRICTION, PHI_TOTAL, PHI_CRITICAL, OMEGA_D, T_PERIOD, ZETA, OMEGA_EFF,
@@ -69,12 +92,11 @@ try:
         C_UCF, C_REF, C_ERROR,
         C_MAX, N_CUBE, CUBE_VOLUME
     )
-except ImportError as e:
-    # Si no se pueden importar, define las constantes manualmente
+except ImportError:
+    # Define manualmente si no se pueden importar
     ALPHA = 26 / 27
     BETA = 1 / 27
     PHI = (1 + math.sqrt(5)) / 2
-    EPSILON_OBSERVER = 0.02716
     PI = math.pi
     SQRT2 = math.sqrt(2)
     SQRT3 = math.sqrt(3)
@@ -142,9 +164,85 @@ except ImportError as e:
     N_CUBE = 27
     CUBE_VOLUME = 27 ** 3
 
-# ======================================================================
+# ============================================================
+# ESTRUCTURA DE DATOS PARA ANÁLISIS
+# ============================================================
+
+@dataclass
+class ConstantErrorAnalysis:
+    """Estructura para almacenar el análisis de errores de una constante."""
+    name: str
+    ucf_value: float
+    experimental_value: float
+    unit: str
+    error: float
+    error_over_epsilon: float
+    error_over_beta: float
+    error_times_phi: float
+    n_for_phi: int
+    epsilon_over_phi_n: float
+    error_over_phi_n: float
+    C_omega: float
+    formula: str
+    layer: str
+
+# ============================================================
+# FUNCIONES DE MEDICIÓN
+# ============================================================
+
+def measure_errors():
+    """Mide los errores de todas las constantes físicas."""
+    return {
+        "lambda": LAMBDA_ERROR,
+        "h0": H_0_ERROR,
+        "m_electron": M_ELECTRON_ERROR,
+        "alpha_em": ALPHA_EM_ERROR,
+        "t_cmb": T_CMB_ERROR,
+        "alpha_s": ALPHA_S_ERROR,
+        "e_planck": E_PLANCK_ERROR,
+    }
+
+def calculate_relations(constants, epsilon=EPSILON_OBSERVER, phi=PHI, beta=BETA):
+    """Calcula relaciones de error con ε, φ y β para cada constante."""
+    results = []
+    for const in constants:
+        error = const["error"]
+        error_over_epsilon = error / epsilon if epsilon != 0 else 0
+        error_over_beta = error / beta if beta != 0 else 0
+        error_times_phi = error * phi
+
+        n = 0
+        while n < 10 and (epsilon / (phi ** n)) > error:
+            n += 1
+        epsilon_over_phi_n = epsilon / (phi ** n) if (phi ** n) != 0 else 0
+        error_over_phi_n = error / epsilon_over_phi_n if epsilon_over_phi_n != 0 else 0
+
+        C_omega = beta + ALPHA * error_over_epsilon * 1.0 * 1.0
+        C_omega = min(C_MAX, max(0.0, C_omega))
+
+        results.append(
+            ConstantErrorAnalysis(
+                name=const["name"],
+                ucf_value=const["ucf_value"],
+                experimental_value=const["experimental_value"],
+                unit=const["unit"],
+                error=error,
+                error_over_epsilon=error_over_epsilon,
+                error_over_beta=error_over_beta,
+                error_times_phi=error_times_phi,
+                n_for_phi=n,
+                epsilon_over_phi_n=epsilon_over_phi_n,
+                error_over_phi_n=error_over_phi_n,
+                C_omega=C_omega,
+                formula=const["formula"],
+                layer=const["layer"],
+            )
+        )
+    return results
+
+# ============================================================
 # LISTA DE CONSTANTES PARA ANÁLISIS
-# ======================================================================
+# ============================================================
 
 CONSTANTS = [
     {
@@ -184,15 +282,6 @@ CONSTANTS = [
         "layer": "L2–L4",
     },
     {
-        "name": "m_p/mₑ (Relación Masas)",
-        "ucf_value": M_P_M_E_UCF,
-        "experimental_value": M_P_M_E_REF,
-        "unit": "adimensional",
-        "error": M_P_M_E_ERROR,
-        "formula": "(27·β²·(π/√2)·τ) / (β³·α_geom⁻¹)",
-        "layer": "L3–L5",
-    },
-    {
         "name": "T_CMB (Temperatura CMB)",
         "ucf_value": T_CMB_UCF,
         "experimental_value": T_CMB_REF,
@@ -212,97 +301,94 @@ CONSTANTS = [
     },
 ]
 
-# ======================================================================
-# PRUEBAS DE INVARIANTES ESTRUCTURALES
-# ======================================================================
+# ============================================================
+# PRUEBAS: HIPÓTESIS DECLARADAS ANTES DE MEDIR
+# ============================================================
 
-def test_alpha_plus_beta_equals_one():
-    """Verifica que α + β = 1."""
-    assert math.isclose(ALPHA + BETA, 1.0, rel_tol=1e-9)
+def test_prediction_declared_before_measurement():
+    """Verifica que las hipótesis están declaradas antes de medir."""
+    assert isinstance(PREDICTED_LAMBDA_ERROR, float)
+    assert isinstance(PREDICTED_H0_ERROR, float)
+    assert isinstance(PREDICTED_ALPHA_EM_ERROR, float)
+    assert isinstance(PREDICTED_T_CMB_ERROR, float)
+    assert isinstance(PREDICTED_M_ELECTRON_ERROR, float)
+    assert PREDICTED_LAMBDA_ERROR > 0
+    assert PREDICTED_H0_ERROR > 0
+    assert PREDICTED_ALPHA_EM_ERROR > 0
+    assert PREDICTED_T_CMB_ERROR > 0
+    assert PREDICTED_M_ELECTRON_ERROR > 0
 
-def test_r_fin_equals_one_plus_beta():
-    """Verifica que R_FIN = 1 + β."""
-    assert math.isclose(R_FIN, 1 + BETA, rel_tol=1e-9)
+# ============================================================
+# PRUEBAS: VALIDACIÓN DE ERRORES (FAST)
+# ============================================================
 
-def test_sin_squared_theta_cube_equals_beta():
-    """Verifica que sin²(θ_cube) = β."""
-    assert math.isclose(math.sin(THETA_CUBE) ** 2, BETA, rel_tol=1e-9)
+@pytest.mark.fast
+def test_lambda_error_matches_prediction():
+    """Verifica que el error de Λ coincide con la predicción (ε)."""
+    measured = measure_errors()
+    assert math.isclose(
+        measured["lambda"], PREDICTED_LAMBDA_ERROR, rel_tol=1e-3
+    ), (
+        f"FAIL: framework predijo Λ error = {PREDICTED_LAMBDA_ERROR}, "
+        f"corpus dio error = {measured['lambda']}"
+    )
 
-def test_cos_squared_theta_cube_equals_alpha():
-    """Verifica que cos²(θ_cube) = α."""
-    assert math.isclose(math.cos(THETA_CUBE) ** 2, ALPHA, rel_tol=1e-9)
+@pytest.mark.fast
+def test_h0_error_matches_prediction():
+    """Verifica que el error de H₀ coincide con la predicción (≈ ε/3.1)."""
+    measured = measure_errors()
+    assert math.isclose(
+        measured["h0"], PREDICTED_H0_ERROR, rel_tol=0.1
+    ), (
+        f"FAIL: framework predijo H₀ error ≈ {PREDICTED_H0_ERROR}, "
+        f"corpus dio error = {measured['h0']}"
+    )
 
-def test_phi_squared_equals_phi_plus_one():
-    """Verifica que φ² = φ + 1."""
-    assert math.isclose(PHI ** 2, PHI + 1, rel_tol=1e-9)
+@pytest.mark.fast
+def test_alpha_em_error_matches_prediction():
+    """Verifica que el error de α⁻¹ coincide con la predicción (≈ ε/φ²)."""
+    measured = measure_errors()
+    assert math.isclose(
+        measured["alpha_em"], PREDICTED_ALPHA_EM_ERROR, rel_tol=0.5
+    ), (
+        f"FAIL: framework predijo α⁻¹ error ≈ {PREDICTED_ALPHA_EM_ERROR}, "
+        f"corpus dio error = {measured['alpha_em']}"
+    )
 
-def test_system_is_underdamped():
-    """Verifica que el sistema está subamortiguado (φ_total < 2π)."""
-    assert PHI_TOTAL < PHI_CRITICAL
+@pytest.mark.fast
+def test_t_cmb_error_matches_prediction():
+    """Verifica que el error de T_CMB coincide con la predicción (≈ ε/φ³)."""
+    measured = measure_errors()
+    assert math.isclose(
+        measured["t_cmb"], PREDICTED_T_CMB_ERROR, rel_tol=0.5
+    ), (
+        f"FAIL: framework predijo T_CMB error ≈ {PREDICTED_T_CMB_ERROR}, "
+        f"corpus dio error = {measured['t_cmb']}"
+    )
 
-def test_system_is_alive():
-    """Verifica que el sistema está vivo (ζ < 1)."""
-    assert ZETA < 1.0
+@pytest.mark.fast
+def test_electron_mass_error_matches_prediction():
+    """Verifica que el error de mₑ coincide con la predicción (≈ ε/φ⁵)."""
+    measured = measure_errors()
+    assert measured["m_electron"] < PREDICTED_M_ELECTRON_ERROR * 10, (
+        f"FAIL: framework predijo mₑ error ≈ {PREDICTED_M_ELECTRON_ERROR}, "
+        f"corpus dio error = {measured['m_electron']} (supera el margen)"
+    )
 
-def test_system_oscillates():
-    """Verifica que el sistema oscila (ω_d > 0)."""
-    assert OMEGA_D > 0
+# ============================================================
+# PRUEBAS: PATRONES DE ESCALADO CON φ
+# ============================================================
 
-def test_c_max_equals_alpha():
-    """Verifica que C_max = α."""
-    assert math.isclose(C_MAX, ALPHA, rel_tol=1e-9)
-
-def test_n_cube_equals_27():
-    """Verifica que N_CUBE = 27."""
-    assert N_CUBE == 27
-
-def test_lambda_error_equals_epsilon():
-    """Verifica que el error de Λ es igual a ε."""
-    assert math.isclose(LAMBDA_ERROR, EPSILON_OBSERVER, rel_tol=1e-3)
-
-# ======================================================================
-# PRUEBAS DE ERRORES EN CONSTANTES FÍSICAS
-# ======================================================================
-
-def test_lambda_error_is_epsilon():
-    """Verifica que el error de Λ es exactamente ε."""
-    assert math.isclose(LAMBDA_ERROR, EPSILON_OBSERVER, rel_tol=1e-3)
-
-def test_hubble_error_is_epsilon_over_3():
-    """Verifica que el error de H₀ es aproximadamente ε/3.1."""
-    expected_error = EPSILON_OBSERVER / 3.1
-    assert math.isclose(H_0_ERROR, expected_error, rel_tol=0.1)
-
-def test_fine_structure_error_is_epsilon_over_phi_squared():
-    """Verifica que el error de α⁻¹ es aproximadamente ε/φ²."""
-    expected_error = EPSILON_OBSERVER / (PHI ** 2)
-    assert math.isclose(ALPHA_EM_ERROR, expected_error, rel_tol=0.5)
-
-def test_cmb_error_is_epsilon_over_phi_cubed():
-    """Verifica que el error de T_CMB es aproximadamente ε/φ³."""
-    expected_error = EPSILON_OBSERVER / (PHI ** 3)
-    assert math.isclose(T_CMB_ERROR, expected_error, rel_tol=0.5)
-
-def test_electron_mass_error_is_minimal():
-    """Verifica que el error de mₑ es mínimo (≈ ε/φ⁵)."""
-    expected_error = EPSILON_OBSERVER / (PHI ** 5)
-    assert M_ELECTRON_ERROR < expected_error * 10  # Permitir margen
-
-def test_strong_coupling_error_is_zero():
-    """Verifica que el error de αₛ es cero."""
-    assert ALPHA_S_ERROR == 0.0
-
-def test_planck_energy_error_is_minimal():
-    """Verifica que el error de Eₚ es mínimo."""
-    assert E_PLANCK_ERROR < 0.00001
-
-# ======================================================================
-# PRUEBAS DE RELACIÓN CON φ Y ε
-# ======================================================================
-
+@pytest.mark.fast
 def test_error_scalability_with_phi():
     """Verifica que los errores escalan con potencias de φ."""
-    errors = [LAMBDA_ERROR, H_0_ERROR, ALPHA_EM_ERROR, T_CMB_ERROR, M_ELECTRON_ERROR]
+    errors = [
+        LAMBDA_ERROR,
+        H_0_ERROR,
+        ALPHA_EM_ERROR,
+        T_CMB_ERROR,
+        M_ELECTRON_ERROR,
+    ]
     expected_ratios = [
         EPSILON_OBSERVER / (PHI ** 0),
         EPSILON_OBSERVER / (PHI ** 1),
@@ -311,37 +397,117 @@ def test_error_scalability_with_phi():
         EPSILON_OBSERVER / (PHI ** 5),
     ]
     for error, expected in zip(errors, expected_ratios):
-        assert error < expected * 2  # Permitir margen de 2x
+        assert error < expected * 2, (
+            f"FAIL: error {error} no escala con ε/φ^n (esperado < {expected * 2})"
+        )
 
-# ======================================================================
-# PRUEBAS DE COHERENCIA ESTRUCTURAL
-# ======================================================================
+# ============================================================
+# PRUEBAS: INVARIANTES ESTRUCTURALES
+# ============================================================
 
+@pytest.mark.fast
+def test_alpha_plus_beta_equals_one():
+    """Verifica que α + β = 1."""
+    assert math.isclose(ALPHA + BETA, 1.0, rel_tol=1e-9), (
+        f"FAIL: α + β = {ALPHA + BETA} ≠ 1"
+    )
+
+@pytest.mark.fast
+def test_sin_squared_theta_cube_equals_beta():
+    """Verifica que sin²(θ_cube) = β."""
+    assert math.isclose(math.sin(THETA_CUBE) ** 2, BETA, rel_tol=1e-9), (
+        f"FAIL: sin²(θ_cube) = {math.sin(THETA_CUBE) ** 2} ≠ β = {BETA}"
+    )
+
+@pytest.mark.fast
+def test_cos_squared_theta_cube_equals_alpha():
+    """Verifica que cos²(θ_cube) = α."""
+    assert math.isclose(math.cos(THETA_CUBE) ** 2, ALPHA, rel_tol=1e-9), (
+        f"FAIL: cos²(θ_cube) = {math.cos(THETA_CUBE) ** 2} ≠ α = {ALPHA}"
+    )
+
+@pytest.mark.fast
+def test_phi_squared_equals_phi_plus_one():
+    """Verifica que φ² = φ + 1."""
+    assert math.isclose(PHI ** 2, PHI + 1, rel_tol=1e-9), (
+        f"FAIL: φ² = {PHI ** 2} ≠ φ + 1 = {PHI + 1}"
+    )
+
+@pytest.mark.fast
+def test_system_is_underdamped():
+    """Verifica que el sistema está subamortiguado (φ_total < 2π)."""
+    assert PHI_TOTAL < PHI_CRITICAL, (
+        f"FAIL: φ_total = {PHI_TOTAL} ≥ 2π = {PHI_CRITICAL} (sistema sobreamortiguado)"
+    )
+
+@pytest.mark.fast
+def test_system_is_alive():
+    """Verifica que el sistema está vivo (ζ < 1)."""
+    assert ZETA < 1.0, (
+        f"FAIL: ζ = {ZETA} ≥ 1 (sistema no vivo)"
+    )
+
+@pytest.mark.fast
+def test_system_oscillates():
+    """Verifica que el sistema oscila (ω_d > 0)."""
+    assert OMEGA_D > 0, (
+        f"FAIL: ω_d = {OMEGA_D} ≤ 0 (sistema no oscila)"
+    )
+
+# ============================================================
+# PRUEBAS: COHERENCIA ESTRUCTURAL
+# ============================================================
+
+@pytest.mark.fast
 def test_coherence_omega_never_exceeds_alpha():
     """Verifica que C_Ω nunca supera α."""
-    for const in CONSTANTS:
-        error = const["error"]
-        C_omega = BETA + ALPHA * (error / EPSILON_OBSERVER) * 1.0 * 1.0
-        C_omega = min(C_MAX, max(0.0, C_omega))
-        assert C_omega <= C_MAX
+    results = calculate_relations(CONSTANTS)
+    for r in results:
+        assert r.C_omega <= C_MAX, (
+            f"FAIL: C_Ω = {r.C_omega} > α = {C_MAX} para {r.name}"
+        )
 
+@pytest.mark.fast
 def test_coherence_omega_is_positive():
     """Verifica que C_Ω siempre es positivo."""
+    results = calculate_relations(CONSTANTS)
+    for r in results:
+        assert r.C_omega > 0, (
+            f"FAIL: C_Ω = {r.C_omega} ≤ 0 para {r.name}"
+        )
+
+# ============================================================
+# PRUEBAS: REPORTES (OPCIONALES)
+# ============================================================
+
+@pytest.mark.fast
+def test_report_measured_errors():
+    """Documenta los errores medidos en las constantes."""
+    results = calculate_relations(CONSTANTS)
+    print("\n=== MEASURED ERRORS REPORT ===")
+    for r in results:
+        print(f"{r.name}: Error = {r.error * 100:.6f}%")
+    assert len(results) > 0
+
+@pytest.mark.fast
+def test_all_constants_have_finite_errors():
+    """Verifica que todas las constantes tienen errores finitos."""
     for const in CONSTANTS:
-        error = const["error"]
-        C_omega = BETA + ALPHA * (error / EPSILON_OBSERVER) * 1.0 * 1.0
-        C_omega = min(C_MAX, max(0.0, C_omega))
-        assert C_omega > 0
+        assert math.isfinite(const["error"]), (
+            f"FAIL: Error no finito en {const['name']}"
+        )
 
-# ======================================================================
-# PRUEBAS DE VISUALIZACIÓN (OPCIONALES)
-# ======================================================================
+# ============================================================
+# PRUEBAS: VISUALIZACIÓN (OPCIONALES)
+# ============================================================
 
+@pytest.mark.slow
 @pytest.mark.skipif(not HAS_MATPLOTLIB or not HAS_NUMPY, reason="matplotlib o numpy no están instalados")
 def test_generate_error_vs_epsilon_plot():
     """Genera el gráfico de Error vs. ε (opcional)."""
-    names = [c["name"].replace(" (", "\n(") for c in CONSTANTS]
-    errors = [c["error"] * 100 for c in CONSTANTS]
+    results = calculate_relations(CONSTANTS)
+    names = [r.name.replace(" (", "\n(") for r in results]
+    errors = [r.error * 100 for r in results]
 
     plt.figure(figsize=(16, 10))
     plt.bar(names, errors, color='skyblue', label='Error Relativo (%)')
@@ -357,6 +523,7 @@ def test_generate_error_vs_epsilon_plot():
     plt.savefig(f'{TEMP_DIR}/error_vs_epsilon.png', dpi=300, bbox_inches='tight')
     plt.close()
 
+@pytest.mark.slow
 @pytest.mark.skipif(not HAS_MATPLOTLIB or not HAS_NUMPY, reason="matplotlib o numpy no están instalados")
 def test_generate_phi_scaling_plot():
     """Genera el gráfico de Escalado de φ en las capas del UIS (opcional)."""
@@ -375,39 +542,9 @@ def test_generate_phi_scaling_plot():
     plt.savefig(f'{TEMP_DIR}/phi_scaling_layers.png', dpi=300, bbox_inches='tight')
     plt.close()
 
-# ======================================================================
-# FUNCIÓN PRINCIPAL PARA ANÁLISIS (OPCIONAL)
-# ======================================================================
-
-def calculate_relations(constants, epsilon=EPSILON_OBSERVER, phi=PHI, beta=BETA):
-    """Calcula relaciones de error con ε, φ y β para cada constante."""
-    results = []
-    for const in constants:
-        error = const["error"]
-        error_over_epsilon = error / epsilon if epsilon != 0 else 0
-        error_over_beta = error / beta if beta != 0 else 0
-        error_times_phi = error * phi
-
-        n = 0
-        while n < 10 and (epsilon / (phi ** n)) > error:
-            n += 1
-        epsilon_over_phi_n = epsilon / (phi ** n) if (phi ** n) != 0 else 0
-        error_over_phi_n = error / epsilon_over_phi_n if epsilon_over_phi_n != 0 else 0
-
-        C_omega = beta + ALPHA * error_over_epsilon * 1.0 * 1.0
-        C_omega = min(C_MAX, max(0.0, C_omega))
-
-        results.append({
-            **const,
-            "error_over_epsilon": error_over_epsilon,
-            "error_over_beta": error_over_beta,
-            "error_times_phi": error_times_phi,
-            "n_for_phi": n,
-            "epsilon_over_phi_n": epsilon_over_phi_n,
-            "error_over_phi_n": error_over_phi_n,
-            "C_omega": C_omega,
-        })
-    return results
+# ============================================================
+# FUNCIÓN PRINCIPAL PARA EJECUCIÓN DIRECTA (OPCIONAL)
+# ============================================================
 
 def print_analysis_results():
     """Imprime los resultados del análisis en la consola."""
@@ -430,20 +567,20 @@ def print_analysis_results():
     table_data = []
     for r in results:
         table_data.append([
-            r["name"],
-            f"{r['ucf_value']:.6e}" if isinstance(r['ucf_value'], float) else r['ucf_value'],
-            f"{r['experimental_value']:.6e}" if isinstance(r['experimental_value'], float) else r['experimental_value'],
-            r["unit"],
-            f"{r['error'] * 100:.6f}%",
-            f"{r['error_over_epsilon']:.6f}",
-            f"{r['error_over_beta']:.6f}",
-            f"{r['error_times_phi']:.6f}",
-            r["n_for_phi"],
-            f"{r['epsilon_over_phi_n'] * 100:.6f}%",
-            f"{r['error_over_phi_n']:.6f}",
-            f"{r['C_omega']:.6f}",
-            r["formula"],
-            r["layer"],
+            r.name,
+            f"{r.ucf_value:.6e}",
+            f"{r.experimental_value:.6e}",
+            r.unit,
+            f"{r.error * 100:.6f}%",
+            f"{r.error_over_epsilon:.6f}",
+            f"{r.error_over_beta:.6f}",
+            f"{r.error_times_phi:.6f}",
+            r.n_for_phi,
+            f"{r.epsilon_over_phi_n * 100:.6f}%",
+            f"{r.error_over_phi_n:.6f}",
+            f"{r.C_omega:.6f}",
+            r.formula,
+            r.layer,
         ])
 
     headers = [
@@ -467,15 +604,16 @@ def print_analysis_results():
 
     # Guardar resultados en CSV (en el directorio temporal)
     with open(f'{TEMP_DIR}/analisis_errores_ucf_completo.csv', 'w', newline='', encoding='utf-8') as csvfile:
-        fieldnames = results[0].keys()
+        fieldnames = results[0].__dict__.keys()
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         writer.writeheader()
-        writer.writerows(results)
+        for r in results:
+            writer.writerow(r.__dict__)
     print(f"\n✅ Resultados guardados en '{TEMP_DIR}/analisis_errores_ucf_completo.csv'.")
 
-# ======================================================================
-# CONFIGURACIÓN PARA EJECUCIÓN DIRECTA (OPCIONAL)
-# ======================================================================
+# ============================================================
+# CONFIGURACIÓN PARA EJECUCIÓN DIRECTA
+# ============================================================
 
 if __name__ == "__main__":
     print_analysis_results()

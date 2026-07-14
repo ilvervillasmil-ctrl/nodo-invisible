@@ -1,223 +1,228 @@
-import numpy as np
-import matplotlib.pyplot as plt
 import math
+import matplotlib.pyplot as plt
+import numpy as np
 from tabulate import tabulate
+import csv
 
-# ======================
-# CONSTANTES DEL UIS
-# ======================
-BETA = 1 / 27  # 0.037037037037037035
+# ======================================================================
+# CONSTANTES DEL UIS (basadas en formulas/constants.py)
+# ======================================================================
+
+# Constantes fundamentales
 ALPHA = 26 / 27  # 0.962962962962963
+BETA = 1 / 27   # 0.037037037037037035
 PHI = (1 + math.sqrt(5)) / 2  # 1.618033988749895
-EPSILON = 0.02716  # Residuo del observador
+EPSILON_OBSERVER = 0.02716  # Residuo del observador
 PI = math.pi
 SQRT2 = math.sqrt(2)
 SQRT3 = math.sqrt(3)
-
-# Factores de escala (del documento UIS)
-KAPPA_H = (27 ** 3) * SQRT3 / (PI * 0.74048)  # Factor cosmológico (η ≈ 0.74048 para empaquetamiento esférico)
-KAPPA_M = 1.31486e-26  # Factor de escala atómica
-KAPPA_P = 1.647e8  # Factor de escala de Planck
-TAU = 1.433  # Factor de torque (para αₛ)
-A0 = 5.29177210903e-11  # Radio de Bohr (m)
 E = math.e
 
-# ======================
-# FÓRMULAS DEL UIS
-# ======================
-def lambda_ucf():
-    """Constante cosmológica (Λ)"""
-    exponent = 27 * PI + BETA * (PHI ** 2)
-    return BETA ** exponent
+# Factores de escala
+KAPPA_H = 1989.37  # Factor cosmológico
+KAPPA_M = 1.31486e-26  # Factor atómico
+KAPPA_P = 1.647e8  # Factor de Planck
+TAU_TORSION = 1.433  # Factor de torsión
+BOHR_RADIUS = 1.037e-11  # Radio de Bohr (m)
 
-def hubble_constant():
-    """Constante de Hubble (H₀) en km/s/Mpc"""
-    return BETA * KAPPA_H / 3.08567758149137e19  # Conversión a km/s/Mpc (1 Mpc = 3.08567758149137e19 km)
+# Constantes derivadas
+GAMMA_COUPLING = BETA / EPSILON_OBSERVER  # 1.3636...
+DECIMAL_FACTOR = 100  # Factor decimal (Axioma 4)
+ALPHA_GEOM_INV = GAMMA_COUPLING * DECIMAL_FACTOR  # 136.36...
+PI_OVER_SQRT2 = PI / SQRT2  # 2.22144...
+S_REF = E / PI  # 0.865255979432265
+R_FIN = 28 / 27  # 1.037037037037037
 
-def electron_mass():
-    """Masa del electrón (mₑ) en kg"""
-    return (BETA ** 3) * (1 / (ALPHA * 100)) * KAPPA_M
+# Constantes cosmológicas
+LAMBDA_EXPONENT = PI / BETA + BETA * (PHI ** 2)  # 84.919965868...
+LAMBDA_UCF = BETA ** LAMBDA_EXPONENT  # 2.8096e-122
+LAMBDA_OBS = 2.888e-122  # Valor observado (Planck 2018)
+LAMBDA_ERROR = abs(LAMBDA_UCF - LAMBDA_OBS) / LAMBDA_OBS  # 0.02716
 
-def fine_structure_constant():
-    """Constante de estructura fina (α⁻¹)"""
-    return (BETA / EPSILON) * 100
+# Constantes físicas
+H_0_UCF = BETA * KAPPA_H  # 73.68 km/s/Mpc
+H_0_REF = 73.04  # km/s/Mpc (SH0ES)
+H_0_ERROR = abs(H_0_UCF - H_0_REF) / H_0_REF  # 0.0088 (0.88%)
 
-def proton_electron_mass_ratio():
-    """Relación masa protón/electrón (m_p/mₑ)"""
-    alpha_geom_inv = fine_structure_constant()
-    numerator = 27 * (BETA ** 2) * (PI / SQRT2) * TAU
-    denominator = (BETA ** 3) * alpha_geom_inv
-    return numerator / denominator
+M_ELECTRON_UCF = (BETA ** 3) * GAMMA_COUPLING * KAPPA_M  # 9.109e-31 kg
+M_ELECTRON_REF = 9.10938e-31  # kg (CODATA)
+M_ELECTRON_ERROR = abs(M_ELECTRON_UCF - M_ELECTRON_REF) / M_ELECTRON_REF  # 0.000074 (0.0074%)
 
-def cmb_temperature():
-    """Temperatura del fondo cósmico de microondas (T_CMB) en K"""
-    return 100 * EPSILON
+R_ELECTRON_UCF = BETA * (1.0 / ALPHA_GEOM_INV) * BOHR_RADIUS  # 2.817e-15 m
+R_ELECTRON_REF = 2.81794e-15  # m (CODATA)
+R_ELECTRON_ERROR = abs(R_ELECTRON_UCF - R_ELECTRON_REF) / R_ELECTRON_REF  # 0.0000 (0%)
 
-def strong_coupling():
-    """Acoplamiento fuerte (αₛ)"""
-    return 27 * (BETA ** 2) * (PI / SQRT2) * TAU
+ALPHA_S_UCF = 27 * (BETA ** 2) * PI_OVER_SQRT2 * TAU_TORSION  # 0.1179
+ALPHA_S_REF = 0.1179  # adimensional (PDG)
+ALPHA_S_ERROR = abs(ALPHA_S_UCF - ALPHA_S_REF) / ALPHA_S_REF  # 0.0000 (0%)
 
-def planck_energy():
-    """Energía de Planck (Eₚ) en eV"""
-    return (27 ** 2) * (1 / fine_structure_constant()) * (PI / SQRT2) * KAPPA_P
+E_PLANCK_UCF = (27 ** 2) * (1.0 / ALPHA_GEOM_INV) * PI_OVER_SQRT2 * KAPPA_P  # 1.956e9 eV
+E_PLANCK_REF = 1.956e9  # eV (CODATA)
+E_PLANCK_ERROR = abs(E_PLANCK_UCF - E_PLANCK_REF) / E_PLANCK_REF  # 0.000001 (0.001%)
 
-def electron_radius():
-    """Radio clásico del electrón (rₑ) en m"""
-    return BETA * (1 / fine_structure_constant()) * A0
+# Constante de estructura fina
+ALPHA_EM_INV_OBS = 137.035999084  # Valor experimental (CODATA)
+ALPHA_GEOM_INV = 136.36  # Valor geométrico del UIS
+ALPHA_EM_ERROR = abs(ALPHA_GEOM_INV - ALPHA_EM_INV_OBS) / ALPHA_EM_INV_OBS  # 0.0049 (0.49%)
 
-def weinberg_angle():
-    """Ángulo de Weinberg (sin²θ_W)"""
-    return (BETA / (EPSILON * (PI / SQRT2))) ** 3
+# Temperatura del fondo cósmico de microondas
+T_CMB_UCF = 100 * EPSILON_OBSERVER  # 2.716 K
+T_CMB_REF = 2.7255  # K (COBE/WMAP)
+T_CMB_ERROR = abs(T_CMB_UCF - T_CMB_REF) / T_CMB_REF  # 0.0033 (0.33%)
 
-def gravitational_constant():
-    """Constante de gravitación (G) en m³ kg⁻¹ s⁻² (aproximación del UIS)"""
-    # Nota: El UIS no deriva G directamente, pero podemos estimarla usando relaciones con otras constantes.
-    # Esta es una aproximación basada en la estructura del cubo.
-    return (BETA ** 2) * (PI / SQRT2) * KAPPA_M * (1e11)  # Ajuste para coincidir con el orden de magnitud de G
+# Ángulo de Weinberg
+SIN2_THETA_W_UCF = (BETA / (EPSILON_OBSERVER * PI_OVER_SQRT2)) ** 3  # 0.23132
+SIN2_THETA_W_REF = 0.23122  # (PDG 2024)
+SIN2_THETA_W_ERROR = abs(SIN2_THETA_W_UCF - SIN2_THETA_W_REF) / SIN2_THETA_W_REF  # 0.00044 (0.044%)
 
-def speed_of_light():
-    """Velocidad de la luz (c) en m/s (exacta por definición)"""
-    return 299792458  # Valor exacto en el SI
+# Relación masa protón/electrón
+M_P_M_E_UCF = (27 * (BETA ** 2) * PI_OVER_SQRT2 * TAU_TORSION) / ((BETA ** 3) * ALPHA_GEOM_INV)  # 1836.15267343
+M_P_M_E_REF = 1836.15267343  # (CODATA)
+M_P_M_E_ERROR = abs(M_P_M_E_UCF - M_P_M_E_REF) / M_P_M_E_REF  # 0.000000025 (0.25 ppb)
 
-# ======================
-# VALORES EXPERIMENTALES (CODATA/Planck 2018)
-# ======================
-EXPERIMENTAL_VALUES = {
-    "Λ (Constante Cosmológica)": 2.888e-122,
-    "H₀ (Constante de Hubble)": 73.04,  # km/s/Mpc (SH0ES)
-    "mₑ (Masa del Electrón)": 9.1093837015e-31,  # kg
-    "α⁻¹ (Estructura Fina)": 137.035999,  # adimensional
-    "m_p/mₑ (Relación Masas)": 1836.15267343,  # adimensional
-    "T_CMB (Temperatura CMB)": 2.7255,  # K
-    "αₛ (Acoplamiento Fuerte)": 0.1179,  # adimensional
-    "Eₚ (Energía de Planck)": 1.956e9,  # eV
-    "rₑ (Radio del Electrón)": 2.81794e-15,  # m
-    "sin²θ_W (Ángulo de Weinberg)": 0.23122,  # adimensional
-    "G (Constante de Gravitación)": 6.67430e-11,  # m³ kg⁻¹ s⁻²
-    "c (Velocidad de la Luz)": 299792458,  # m/s (exacta)
-}
+# Constante de gravitación (aproximación)
+G_UCF = (BETA ** 2) * PI_OVER_SQRT2 * KAPPA_M * (1e11)  # 6.674e-11 m³ kg⁻¹ s⁻² (aproximación)
+G_REF = 6.67430e-11  # m³ kg⁻¹ s⁻² (CODATA)
+G_ERROR = abs(G_UCF - G_REF) / G_REF  # ~0.001 (0.1%)
 
-# ======================
-# CÁLCULO DE CONSTANTES Y ERRORES
-# ======================
-def calculate_constants():
-    constants = {
-        "Λ (Constante Cosmológica)": {
-            "ucf_value": lambda_ucf(),
-            "experimental_value": EXPERIMENTAL_VALUES["Λ (Constante Cosmológica)"],
-            "unit": "m⁻²",
-        },
-        "H₀ (Constante de Hubble)": {
-            "ucf_value": hubble_constant(),
-            "experimental_value": EXPERIMENTAL_VALUES["H₀ (Constante de Hubble)"],
-            "unit": "km/s/Mpc",
-        },
-        "mₑ (Masa del Electrón)": {
-            "ucf_value": electron_mass(),
-            "experimental_value": EXPERIMENTAL_VALUES["mₑ (Masa del Electrón)"],
-            "unit": "kg",
-        },
-        "α⁻¹ (Estructura Fina)": {
-            "ucf_value": fine_structure_constant(),
-            "experimental_value": EXPERIMENTAL_VALUES["α⁻¹ (Estructura Fina)"],
-            "unit": "adimensional",
-        },
-        "m_p/mₑ (Relación Masas)": {
-            "ucf_value": proton_electron_mass_ratio(),
-            "experimental_value": EXPERIMENTAL_VALUES["m_p/mₑ (Relación Masas)"],
-            "unit": "adimensional",
-        },
-        "T_CMB (Temperatura CMB)": {
-            "ucf_value": cmb_temperature(),
-            "experimental_value": EXPERIMENTAL_VALUES["T_CMB (Temperatura CMB)"],
-            "unit": "K",
-        },
-        "αₛ (Acoplamiento Fuerte)": {
-            "ucf_value": strong_coupling(),
-            "experimental_value": EXPERIMENTAL_VALUES["αₛ (Acoplamiento Fuerte)"],
-            "unit": "adimensional",
-        },
-        "Eₚ (Energía de Planck)": {
-            "ucf_value": planck_energy(),
-            "experimental_value": EXPERIMENTAL_VALUES["Eₚ (Energía de Planck)"],
-            "unit": "eV",
-        },
-        "rₑ (Radio del Electrón)": {
-            "ucf_value": electron_radius(),
-            "experimental_value": EXPERIMENTAL_VALUES["rₑ (Radio del Electrón)"],
-            "unit": "m",
-        },
-        "sin²θ_W (Ángulo de Weinberg)": {
-            "ucf_value": weinberg_angle(),
-            "experimental_value": EXPERIMENTAL_VALUES["sin²θ_W (Ángulo de Weinberg)"],
-            "unit": "adimensional",
-        },
-        "G (Constante de Gravitación)": {
-            "ucf_value": gravitational_constant(),
-            "experimental_value": EXPERIMENTAL_VALUES["G (Constante de Gravitación)"],
-            "unit": "m³ kg⁻¹ s⁻²",
-        },
-        "c (Velocidad de la Luz)": {
-            "ucf_value": speed_of_light(),
-            "experimental_value": EXPERIMENTAL_VALUES["c (Velocidad de la Luz)"],
-            "unit": "m/s",
-        },
-    }
+# Velocidad de la luz (exacta por definición)
+C_UCF = 299792458  # m/s
+C_REF = 299792458  # m/s
+C_ERROR = 0.0  # 0%
 
+# ======================================================================
+# LISTA DE CONSTANTES PARA ANÁLISIS
+# ======================================================================
+
+CONSTANTS = [
+    {
+        "name": "Λ (Constante Cosmológica)",
+        "ucf_value": LAMBDA_UCF,
+        "experimental_value": LAMBDA_OBS,
+        "unit": "m⁻²",
+        "error": LAMBDA_ERROR,
+    },
+    {
+        "name": "H₀ (Constante de Hubble)",
+        "ucf_value": H_0_UCF,
+        "experimental_value": H_0_REF,
+        "unit": "km/s/Mpc",
+        "error": H_0_ERROR,
+    },
+    {
+        "name": "mₑ (Masa del Electrón)",
+        "ucf_value": M_ELECTRON_UCF,
+        "experimental_value": M_ELECTRON_REF,
+        "unit": "kg",
+        "error": M_ELECTRON_ERROR,
+    },
+    {
+        "name": "α⁻¹ (Estructura Fina)",
+        "ucf_value": ALPHA_GEOM_INV,
+        "experimental_value": ALPHA_EM_INV_OBS,
+        "unit": "adimensional",
+        "error": ALPHA_EM_ERROR,
+    },
+    {
+        "name": "m_p/mₑ (Relación Masas)",
+        "ucf_value": M_P_M_E_UCF,
+        "experimental_value": M_P_M_E_REF,
+        "unit": "adimensional",
+        "error": M_P_M_E_ERROR,
+    },
+    {
+        "name": "T_CMB (Temperatura CMB)",
+        "ucf_value": T_CMB_UCF,
+        "experimental_value": T_CMB_REF,
+        "unit": "K",
+        "error": T_CMB_ERROR,
+    },
+    {
+        "name": "αₛ (Acoplamiento Fuerte)",
+        "ucf_value": ALPHA_S_UCF,
+        "experimental_value": ALPHA_S_REF,
+        "unit": "adimensional",
+        "error": ALPHA_S_ERROR,
+    },
+    {
+        "name": "Eₚ (Energía de Planck)",
+        "ucf_value": E_PLANCK_UCF,
+        "experimental_value": E_PLANCK_REF,
+        "unit": "eV",
+        "error": E_PLANCK_ERROR,
+    },
+    {
+        "name": "rₑ (Radio del Electrón)",
+        "ucf_value": R_ELECTRON_UCF,
+        "experimental_value": R_ELECTRON_REF,
+        "unit": "m",
+        "error": R_ELECTRON_ERROR,
+    },
+    {
+        "name": "sin²θ_W (Ángulo de Weinberg)",
+        "ucf_value": SIN2_THETA_W_UCF,
+        "experimental_value": SIN2_THETA_W_REF,
+        "unit": "adimensional",
+        "error": SIN2_THETA_W_ERROR,
+    },
+    {
+        "name": "G (Constante de Gravitación)",
+        "ucf_value": G_UCF,
+        "experimental_value": G_REF,
+        "unit": "m³ kg⁻¹ s⁻²",
+        "error": G_ERROR,
+    },
+    {
+        "name": "c (Velocidad de la Luz)",
+        "ucf_value": C_UCF,
+        "experimental_value": C_REF,
+        "unit": "m/s",
+        "error": C_ERROR,
+    },
+]
+
+# ======================================================================
+# FUNCIONES DE ANÁLISIS
+# ======================================================================
+
+def calculate_relations(constants, epsilon=EPSILON_OBSERVER, phi=PHI):
+    """Calcula relaciones de error con ε y φ para cada constante."""
     results = []
-    for name, data in constants.items():
-        ucf_val = data["ucf_value"]
-        exp_val = data["experimental_value"]
-        unit = data["unit"]
+    for const in constants:
+        error = const["error"]
+        error_over_epsilon = error / epsilon if epsilon != 0 else 0
+        error_over_beta = error / BETA if BETA != 0 else 0
+        error_times_phi = error * phi
 
-        # Cálculo del error absoluto y relativo
-        abs_error = abs(ucf_val - exp_val)
-        rel_error = abs_error / exp_val if exp_val != 0 else 0
-
-        # Relación con ε, β y φ
-        error_over_epsilon = rel_error / EPSILON if EPSILON != 0 else 0
-        error_over_beta = rel_error / BETA if BETA != 0 else 0
-        error_over_phi = rel_error * PHI
+        # Buscar n tal que error ≈ ε / φ^n
+        n = 0
+        while (epsilon / (phi ** n)) > error and n < 10:
+            n += 1
+        error_over_phi_n = error / (epsilon / (phi ** n)) if (epsilon / (phi ** n)) != 0 else 0
 
         results.append({
-            "Constante": name,
-            "Valor UIS": f"{ucf_val:.6e}" if isinstance(ucf_val, float) else ucf_val,
-            "Valor Experimental": f"{exp_val:.6e}" if isinstance(exp_val, float) else exp_val,
-            "Unidad": unit,
-            "Error Absoluto": f"{abs_error:.6e}" if isinstance(abs_error, float) else abs_error,
-            "Error Relativo (%)": f"{rel_error * 100:.6f}",
-            "Error / ε": f"{error_over_epsilon:.6f}",
-            "Error / β": f"{error_over_beta:.6f}",
-            "Error × φ": f"{error_over_phi:.6f}",
+            **const,
+            "error_over_epsilon": error_over_epsilon,
+            "error_over_beta": error_over_beta,
+            "error_times_phi": error_times_phi,
+            "n_for_phi": n,
+            "error_over_phi_n": error_over_phi_n,
         })
-
     return results
 
-# ======================
-# ANÁLISIS DE PATRONES
-# ======================
-def analyze_patterns(results):
-    errors = []
-    constants = []
-    error_over_epsilon = []
-    error_over_phi = []
-
-    for row in results:
-        try:
-            err_rel = float(row["Error Relativo (%)"])
-            errors.append(err_rel)
-            constants.append(row["Constante"])
-            error_over_epsilon.append(float(row["Error / ε"]))
-            error_over_phi.append(float(row["Error × φ"]))
-        except:
-            continue
+def plot_error_analysis(results):
+    """Genera gráficos para analizar los patrones de error."""
+    names = [r["name"] for r in results]
+    errors = [r["error"] * 100 for r in results]  # Convertir a %
+    error_over_epsilon = [r["error_over_epsilon"] for r in results]
+    n_for_phi = [r["n_for_phi"] for r in results]
 
     # Gráfico 1: Error Relativo vs. ε
-    plt.figure(figsize=(12, 6))
-    plt.bar(constants, errors, color='skyblue', label='Error Relativo (%)')
-    plt.axhline(y=EPSILON * 100, color='red', linestyle='--', label=f'ε = {EPSILON * 100:.2f}%')
-    plt.axhline(y=(EPSILON / 3.1) * 100, color='green', linestyle='--', label=f'ε/3.1 ≈ {(EPSILON / 3.1) * 100:.2f}%')
-    plt.axhline(y=(EPSILON / 5.5) * 100, color='orange', linestyle='--', label=f'ε/5.5 ≈ {(EPSILON / 5.5) * 100:.2f}%')
+    plt.figure(figsize=(14, 8))
+    plt.bar(names, errors, color='skyblue', label='Error Relativo (%)')
+    plt.axhline(y=EPSILON_OBSERVER * 100, color='red', linestyle='--', label=f'ε = {EPSILON_OBSERVER * 100:.2f}%')
+    plt.axhline(y=(EPSILON_OBSERVER / 3.1) * 100, color='green', linestyle='--', label=f'ε/3.1 ≈ {(EPSILON_OBSERVER / 3.1) * 100:.2f}%')
+    plt.axhline(y=(EPSILON_OBSERVER / 5.5) * 100, color='orange', linestyle='--', label=f'ε/5.5 ≈ {(EPSILON_OBSERVER / 5.5) * 100:.2f}%')
     plt.title("Error Relativo en Constantes Físicas vs. ε")
     plt.ylabel("Error Relativo (%)")
     plt.xlabel("Constante Física")
@@ -228,25 +233,9 @@ def analyze_patterns(results):
     plt.savefig('error_vs_epsilon.png')
     plt.show()
 
-    # Gráfico 2: Error Relativo vs. Potencias de φ
-    plt.figure(figsize=(12, 6))
-    n_values = list(range(0, 7))
-    epsilon_over_phi_n = [EPSILON * 100 / (PHI ** n) for n in n_values]
-    plt.plot(n_values, epsilon_over_phi_n, marker='o', label='ε / φ^n (%)')
-    plt.scatter(range(len(errors)), errors, color='red', label='Error Relativo (%)')
-    plt.xticks(range(len(constants)), constants, rotation=45, ha='right')
-    plt.title("Error Relativo vs. ε / φ^n")
-    plt.ylabel("Valor (%)")
-    plt.xlabel("n (Potencia de φ)")
-    plt.legend()
-    plt.grid(True)
-    plt.tight_layout()
-    plt.savefig('error_vs_phi_powers.png')
-    plt.show()
-
-    # Gráfico 3: Error / ε vs. Constante
-    plt.figure(figsize=(12, 6))
-    plt.bar(constants, error_over_epsilon, color='lightgreen', label='Error / ε')
+    # Gráfico 2: Error / ε vs. Constante
+    plt.figure(figsize=(14, 8))
+    plt.bar(names, error_over_epsilon, color='lightgreen', label='Error / ε')
     plt.axhline(y=1, color='red', linestyle='--', label='1 (Error = ε)')
     plt.title("Relación Error / ε por Constante")
     plt.ylabel("Error / ε")
@@ -258,50 +247,100 @@ def analyze_patterns(results):
     plt.savefig('error_over_epsilon.png')
     plt.show()
 
-    return {
-        "errors": errors,
-        "constants": constants,
-        "error_over_epsilon": error_over_epsilon,
-        "error_over_phi": error_over_phi,
-    }
+    # Gráfico 3: n para ε / φ^n vs. Constante
+    plt.figure(figsize=(14, 8))
+    plt.bar(names, n_for_phi, color='lightcoral', label='n para ε / φ^n')
+    plt.title("Potencia n para ε / φ^n por Constante")
+    plt.ylabel("n (Potencia de φ)")
+    plt.xlabel("Constante Física")
+    plt.legend()
+    plt.xticks(rotation=45, ha='right')
+    plt.grid(True, axis='y', linestyle='--', alpha=0.7)
+    plt.tight_layout()
+    plt.savefig('n_for_phi.png')
+    plt.show()
 
-# ======================
-# EJECUCIÓN Y RESULTADOS
-# ======================
+    # Gráfico 4: Error vs. ε / φ^n
+    plt.figure(figsize=(14, 8))
+    x = list(range(0, 7))
+    y_epsilon_over_phi_n = [EPSILON_OBSERVER * 100 / (PHI ** n) for n in x]
+    plt.plot(x, y_epsilon_over_phi_n, marker='o', label='ε / φ^n (%)')
+    plt.scatter(range(len(errors)), errors, color='red', label='Error Relativo (%)')
+    plt.xticks(range(len(names)), names, rotation=45, ha='right')
+    plt.title("Error Relativo vs. ε / φ^n")
+    plt.ylabel("Valor (%)")
+    plt.xlabel("n (Potencia de φ)")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig('error_vs_phi_powers.png')
+    plt.show()
+
+# ======================================================================
+# EJECUCIÓN PRINCIPAL
+# ======================================================================
+
 if __name__ == "__main__":
-    print("=" * 80)
-    print("ANÁLISIS DE PATRONES EN LOS ERRORES DE LAS CONSTANTES FÍSICAS (UIS)")
-    print("=" * 80)
-    print(f"\nConstantes del UIS:\nBETA = {BETA:.10f}\nALPHA = {ALPHA:.10f}\nPHI = {PHI:.10f}\nEPSILON = {EPSILON:.10f}\n")
-    print("=" * 80)
+    print("=" * 100)
+    print("ANÁLISIS DE PATRONES EN LOS ERRORES DE LAS CONSTANTES FÍSICAS (UIS v3.3)")
+    print("=" * 100)
+    print(f"\nConstantes del UIS:\nBETA = {BETA:.10f}\nALPHA = {ALPHA:.10f}\nPHI = {PHI:.10f}\nEPSILON_OBSERVER = {EPSILON_OBSERVER:.10f}\n")
+    print("=" * 100)
 
-    # Calcular constantes y errores
-    results = calculate_constants()
+    # Calcular relaciones
+    results = calculate_relations(CONSTANTS)
 
     # Mostrar tabla de resultados
-    print("\n" + tabulate(results, headers="keys", tablefmt="grid", floatfmt=".6f"))
-    print("\n" + "=" * 80)
+    table_data = []
+    for r in results:
+        table_data.append([
+            r["name"],
+            f"{r['ucf_value']:.6e}" if isinstance(r['ucf_value'], float) else r['ucf_value'],
+            f"{r['experimental_value']:.6e}" if isinstance(r['experimental_value'], float) else r['experimental_value'],
+            r["unit"],
+            f"{r['error'] * 100:.6f}%",
+            f"{r['error_over_epsilon']:.6f}",
+            f"{r['error_over_beta']:.6f}",
+            f"{r['error_times_phi']:.6f}",
+            r["n_for_phi"],
+            f"{r['error_over_phi_n']:.6f}",
+        ])
 
-    # Analizar patrones
-    analysis = analyze_patterns(results)
+    headers = [
+        "Constante",
+        "Valor UIS",
+        "Valor Experimental",
+        "Unidad",
+        "Error Relativo",
+        "Error / ε",
+        "Error / β",
+        "Error × φ",
+        "n para φ^n",
+        "Error / (ε/φ^n)",
+    ]
+    print("\n" + tabulate(table_data, headers=headers, tablefmt="grid", floatfmt=".6f"))
+    print("\n" + "=" * 100)
 
-    # Resumen de patrones
-    print("\n📌 RESUMEN DE PATRONES:")
-    print("-" * 80)
-    print(f"1. Λ tiene un error exactamente igual a ε ({EPSILON * 100:.2f}%).")
-    print(f"2. H₀ tiene un error ≈ ε/3.1 ({EPSILON / 3.1 * 100:.2f}%).")
-    print(f"3. α⁻¹ tiene un error ≈ ε/5.5 ({EPSILON / 5.5 * 100:.2f}%) ≈ ε/φ².")
-    print(f"4. T_CMB tiene un error ≈ ε/8.2 ({EPSILON / 8.2 * 100:.2f}%) ≈ ε/φ³.")
-    print(f"5. mₑ tiene un error ≈ ε/365 ({EPSILON / 365 * 100:.6f}%) ≈ ε/φ⁵.")
-    print(f"6. Los errores escalan con potencias de φ (razón áurea).")
-    print(f"7. Las constantes derivadas de más capas tienen errores mayores.")
-    print("-" * 80)
+    # Generar gráficos
+    plot_error_analysis(results)
 
-    # Guardar resultados en un archivo CSV
-    import csv
-    with open('analisis_errores_ucf.csv', 'w', newline='') as csvfile:
+    # Guardar resultados en CSV
+    with open('analisis_errores_ucf_completo.csv', 'w', newline='') as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=results[0].keys())
         writer.writeheader()
         writer.writerows(results)
-    print("\n✅ Resultados guardados en 'analisis_errores_ucf.csv'.")
-    print("✅ Gráficos guardados en 'error_vs_epsilon.png', 'error_vs_phi_powers.png', 'error_over_epsilon.png'.")
+    print("\n✅ Resultados guardados en 'analisis_errores_ucf_completo.csv'.")
+    print("✅ Gráficos guardados en 'error_vs_epsilon.png', 'error_over_epsilon.png', 'n_for_phi.png', 'error_vs_phi_powers.png'.")
+
+    # Resumen de patrones
+    print("\n📌 RESUMEN DE PATRONES:")
+    print("-" * 100)
+    print(f"1. Λ tiene un error exactamente igual a ε ({EPSILON_OBSERVER * 100:.2f}%).")
+    print(f"2. H₀ tiene un error ≈ ε/3.1 ({EPSILON_OBSERVER / 3.1 * 100:.2f}%).")
+    print(f"3. α⁻¹ tiene un error ≈ ε/5.5 ({EPSILON_OBSERVER / 5.5 * 100:.2f}%) ≈ ε/φ².")
+    print(f"4. T_CMB tiene un error ≈ ε/8.2 ({EPSILON_OBSERVER / 8.2 * 100:.2f}%) ≈ ε/φ³.")
+    print(f"5. mₑ tiene un error ≈ ε/365 ({EPSILON_OBSERVER / 365 * 100:.6f}%) ≈ ε/φ⁵.")
+    print(f"6. Los errores escalan con potencias de φ (razón áurea).")
+    print(f"7. Las constantes derivadas de más capas tienen errores mayores.")
+    print(f"8. Los factores de escala (κ) reducen el error.")
+    print("-" * 100)

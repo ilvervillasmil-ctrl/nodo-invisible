@@ -2,126 +2,145 @@
 Script de pruebas para analizar la relación entre los errores de las constantes físicas del UIS,
 el residuo del observador (ε = 0.02716), y la razón áurea (φ ≈ 1.618034).
 
-Este script está diseñado para ser ejecutado con pytest y aumentar el conteo de pruebas.
-Basado en:
-- Universal Integration System (UIS) v3.3
-- Villasmil-Omega Framework (UCF)
+Este script está optimizado para ejecutarse en CI.
 """
 
 import math
 import pytest
-import matplotlib.pyplot as plt
-import numpy as np
-from tabulate import tabulate
-import csv
 import os
+import sys
+import tempfile
+from pathlib import Path
+
+# ======================================================================
+# CONFIGURACIÓN INICIAL PARA CI
+# ======================================================================
+
+# Añade el directorio raíz al PYTHONPATH
+REPO_ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(REPO_ROOT))
+
+# Verifica dependencias opcionales
+try:
+    import matplotlib.pyplot as plt
+    HAS_MATPLOTLIB = True
+except ImportError:
+    HAS_MATPLOTLIB = False
+
+try:
+    import numpy as np
+    HAS_NUMPY = True
+except ImportError:
+    HAS_NUMPY = False
+
+try:
+    from tabulate import tabulate
+    HAS_TABULATE = True
+except ImportError:
+    HAS_TABULATE = False
+
+# Crea un directorio temporal para archivos generados
+TEMP_DIR = tempfile.mkdtemp()
+os.makedirs(TEMP_DIR, exist_ok=True)
 
 # ======================================================================
 # CONSTANTES FUNDAMENTALES DEL UIS
 # ======================================================================
 
-# --- Constantes base ---
-ALPHA = 26 / 27  # 0.962962962962963
-BETA = 1 / 27   # 0.037037037037037035
-PHI = (1 + math.sqrt(5)) / 2  # 1.618033988749895
-EPSILON_OBSERVER = 0.02716  # Residuo del observador
-PI = math.pi
-SQRT2 = math.sqrt(2)
-SQRT3 = math.sqrt(3)
-E = math.e
-
-# --- Factores de escala ---
-KAPPA_H = 1989.37  # Factor cosmológico
-KAPPA_M = 1.31486e-26  # Factor atómico
-KAPPA_P = 1.647e8  # Factor de Planck
-TAU_TORSION = 1.433  # Factor de torsión
-BOHR_RADIUS = 1.037e-11  # Radio de Bohr (m)
-
-# --- Constantes derivadas ---
-GAMMA_COUPLING = BETA / EPSILON_OBSERVER
-DECIMAL_FACTOR = 100
-ALPHA_GEOM_INV = GAMMA_COUPLING * DECIMAL_FACTOR
-PI_OVER_SQRT2 = PI / SQRT2
-S_REF = E / PI
-R_FIN = 28 / 27
-
-# --- Dinámica del oscilador ---
-OMEGA_0 = PI
-OMEGA_0_SQUARED = PI ** 2
-LAYER_FRICTION = [0.10, 0.02, 0.05, 0.03, 0.01, 0.01, 0.00]
-PHI_TOTAL = sum(LAYER_FRICTION)
-PHI_CRITICAL = 2 * PI
-OMEGA_D = math.sqrt(max(0, OMEGA_0_SQUARED - (PHI_TOTAL ** 2) / 4))
-T_PERIOD = 2 * PI / OMEGA_D if OMEGA_D > 0 else float('inf')
-ZETA = PHI_TOTAL / (2 * OMEGA_0)
-OMEGA_EFF = PI * (1 - math.sqrt(BETA))
-
-# --- Geometría del cubo ---
-THETA_CUBE = math.asin(1 / math.sqrt(27))
-THETA_CUBE_DEG = math.degrees(THETA_CUBE)
-TAN_THETA = 1 / math.sqrt(26)
-
-# --- Constantes cosmológicas ---
-LAMBDA_EXPONENT = PI / BETA + BETA * (PHI ** 2)
-LAMBDA_UCF = BETA ** LAMBDA_EXPONENT
-LAMBDA_OBS = 2.888e-122
-LAMBDA_ERROR = abs(LAMBDA_UCF - LAMBDA_OBS) / LAMBDA_OBS
-
-# --- Constantes físicas ---
-H_0_UCF = BETA * KAPPA_H
-H_0_REF = 73.04
-H_0_ERROR = abs(H_0_UCF - H_0_REF) / H_0_REF
-
-M_ELECTRON_UCF = (BETA ** 3) * GAMMA_COUPLING * KAPPA_M
-M_ELECTRON_REF = 9.10938e-31
-M_ELECTRON_ERROR = abs(M_ELECTRON_UCF - M_ELECTRON_REF) / M_ELECTRON_REF
-
-R_ELECTRON_UCF = BETA * (1.0 / ALPHA_GEOM_INV) * BOHR_RADIUS
-R_ELECTRON_REF = 2.81794e-15
-R_ELECTRON_ERROR = abs(R_ELECTRON_UCF - R_ELECTRON_REF) / R_ELECTRON_REF
-
-ALPHA_S_UCF = 27 * (BETA ** 2) * PI_OVER_SQRT2 * TAU_TORSION
-ALPHA_S_REF = 0.1179
-ALPHA_S_ERROR = abs(ALPHA_S_UCF - ALPHA_S_REF) / ALPHA_S_REF
-
-E_PLANCK_UCF = (27 ** 2) * (1.0 / ALPHA_GEOM_INV) * PI_OVER_SQRT2 * KAPPA_P
-E_PLANCK_REF = 1.956e9
-E_PLANCK_ERROR = abs(E_PLANCK_UCF - E_PLANCK_REF) / E_PLANCK_REF
-
-# --- Constante de estructura fina ---
-ALPHA_EM_INV_OBS = 137.035999084
-ALPHA_GEOM_INV = 136.36
-ALPHA_EM_ERROR = abs(ALPHA_GEOM_INV - ALPHA_EM_INV_OBS) / ALPHA_EM_INV_OBS
-
-# --- Temperatura del fondo cósmico de microondas ---
-T_CMB_UCF = 100 * EPSILON_OBSERVER
-T_CMB_REF = 2.7255
-T_CMB_ERROR = abs(T_CMB_UCF - T_CMB_REF) / T_CMB_REF
-
-# --- Ángulo de Weinberg ---
-SIN2_THETA_W_UCF = (BETA / (EPSILON_OBSERVER * PI_OVER_SQRT2)) ** 3
-SIN2_THETA_W_REF = 0.23122
-SIN2_THETA_W_ERROR = abs(SIN2_THETA_W_UCF - SIN2_THETA_W_REF) / SIN2_THETA_W_REF
-
-# --- Relación masa protón/electrón ---
-M_P_M_E_UCF = (27 * (BETA ** 2) * PI_OVER_SQRT2 * TAU_TORSION) / ((BETA ** 3) * ALPHA_GEOM_INV)
-M_P_M_E_REF = 1836.15267343
-M_P_M_E_ERROR = abs(M_P_M_E_UCF - M_P_M_E_REF) / M_P_M_E_REF
-
-# --- Constante de gravitación (aproximación) ---
-G_UCF = (BETA ** 2) * PI_OVER_SQRT2 * KAPPA_M * (1e11)
-G_REF = 6.67430e-11
-G_ERROR = abs(G_UCF - G_REF) / G_REF
-
-# --- Velocidad de la luz (exacta por definición) ---
-C_UCF = 299792458
-C_REF = 299792458
-C_ERROR = 0.0
-
-# --- Constantes adicionales del UIS ---
-C_MAX = ALPHA
-N_CUBE = 27
-CUBE_VOLUME = 27 ** 3
+# Importa constantes desde formulas/constants.py
+try:
+    from formulas.constants import (
+        ALPHA, BETA, PHI, EPSILON_OBSERVER, PI, SQRT2, SQRT3, E,
+        KAPPA_H, KAPPA_M, KAPPA_P, TAU_TORSION, BOHR_RADIUS,
+        GAMMA_COUPLING, DECIMAL_FACTOR, ALPHA_GEOM_INV, PI_OVER_SQRT2, S_REF, R_FIN,
+        OMEGA_0, OMEGA_0_SQUARED, LAYER_FRICTION, PHI_TOTAL, PHI_CRITICAL, OMEGA_D, T_PERIOD, ZETA, OMEGA_EFF,
+        THETA_CUBE, THETA_CUBE_DEG, TAN_THETA,
+        LAMBDA_EXPONENT, LAMBDA_UCF, LAMBDA_OBS, LAMBDA_ERROR,
+        H_0_UCF, H_0_REF, H_0_ERROR,
+        M_ELECTRON_UCF, M_ELECTRON_REF, M_ELECTRON_ERROR,
+        R_ELECTRON_UCF, R_ELECTRON_REF, R_ELECTRON_ERROR,
+        ALPHA_S_UCF, ALPHA_S_REF, ALPHA_S_ERROR,
+        E_PLANCK_UCF, E_PLANCK_REF, E_PLANCK_ERROR,
+        ALPHA_EM_INV_OBS, ALPHA_EM_ERROR,
+        T_CMB_UCF, T_CMB_REF, T_CMB_ERROR,
+        SIN2_THETA_W_UCF, SIN2_THETA_W_REF, SIN2_THETA_W_ERROR,
+        M_P_M_E_UCF, M_P_M_E_REF, M_P_M_E_ERROR,
+        G_UCF, G_REF, G_ERROR,
+        C_UCF, C_REF, C_ERROR,
+        C_MAX, N_CUBE, CUBE_VOLUME
+    )
+except ImportError as e:
+    # Si no se pueden importar, define las constantes manualmente
+    ALPHA = 26 / 27
+    BETA = 1 / 27
+    PHI = (1 + math.sqrt(5)) / 2
+    EPSILON_OBSERVER = 0.02716
+    PI = math.pi
+    SQRT2 = math.sqrt(2)
+    SQRT3 = math.sqrt(3)
+    E = math.e
+    KAPPA_H = 1989.37
+    KAPPA_M = 1.31486e-26
+    KAPPA_P = 1.647e8
+    TAU_TORSION = 1.433
+    BOHR_RADIUS = 1.037e-11
+    GAMMA_COUPLING = BETA / EPSILON_OBSERVER
+    DECIMAL_FACTOR = 100
+    ALPHA_GEOM_INV = GAMMA_COUPLING * DECIMAL_FACTOR
+    PI_OVER_SQRT2 = PI / SQRT2
+    S_REF = E / PI
+    R_FIN = 28 / 27
+    OMEGA_0 = PI
+    OMEGA_0_SQUARED = PI ** 2
+    LAYER_FRICTION = [0.10, 0.02, 0.05, 0.03, 0.01, 0.01, 0.00]
+    PHI_TOTAL = sum(LAYER_FRICTION)
+    PHI_CRITICAL = 2 * PI
+    OMEGA_D = math.sqrt(max(0, OMEGA_0_SQUARED - (PHI_TOTAL ** 2) / 4))
+    T_PERIOD = 2 * PI / OMEGA_D if OMEGA_D > 0 else float('inf')
+    ZETA = PHI_TOTAL / (2 * OMEGA_0)
+    OMEGA_EFF = PI * (1 - math.sqrt(BETA))
+    THETA_CUBE = math.asin(1 / math.sqrt(27))
+    THETA_CUBE_DEG = math.degrees(THETA_CUBE)
+    TAN_THETA = 1 / math.sqrt(26)
+    LAMBDA_EXPONENT = PI / BETA + BETA * (PHI ** 2)
+    LAMBDA_UCF = BETA ** LAMBDA_EXPONENT
+    LAMBDA_OBS = 2.888e-122
+    LAMBDA_ERROR = abs(LAMBDA_UCF - LAMBDA_OBS) / LAMBDA_OBS
+    H_0_UCF = BETA * KAPPA_H
+    H_0_REF = 73.04
+    H_0_ERROR = abs(H_0_UCF - H_0_REF) / H_0_REF
+    M_ELECTRON_UCF = (BETA ** 3) * GAMMA_COUPLING * KAPPA_M
+    M_ELECTRON_REF = 9.10938e-31
+    M_ELECTRON_ERROR = abs(M_ELECTRON_UCF - M_ELECTRON_REF) / M_ELECTRON_REF
+    R_ELECTRON_UCF = BETA * (1.0 / ALPHA_GEOM_INV) * BOHR_RADIUS
+    R_ELECTRON_REF = 2.81794e-15
+    R_ELECTRON_ERROR = abs(R_ELECTRON_UCF - R_ELECTRON_REF) / R_ELECTRON_REF
+    ALPHA_S_UCF = 27 * (BETA ** 2) * PI_OVER_SQRT2 * TAU_TORSION
+    ALPHA_S_REF = 0.1179
+    ALPHA_S_ERROR = abs(ALPHA_S_UCF - ALPHA_S_REF) / ALPHA_S_REF
+    E_PLANCK_UCF = (27 ** 2) * (1.0 / ALPHA_GEOM_INV) * PI_OVER_SQRT2 * KAPPA_P
+    E_PLANCK_REF = 1.956e9
+    E_PLANCK_ERROR = abs(E_PLANCK_UCF - E_PLANCK_REF) / E_PLANCK_REF
+    ALPHA_EM_INV_OBS = 137.035999084
+    ALPHA_EM_ERROR = abs(ALPHA_GEOM_INV - ALPHA_EM_INV_OBS) / ALPHA_EM_INV_OBS
+    T_CMB_UCF = 100 * EPSILON_OBSERVER
+    T_CMB_REF = 2.7255
+    T_CMB_ERROR = abs(T_CMB_UCF - T_CMB_REF) / T_CMB_REF
+    SIN2_THETA_W_UCF = (BETA / (EPSILON_OBSERVER * PI_OVER_SQRT2)) ** 3
+    SIN2_THETA_W_REF = 0.23122
+    SIN2_THETA_W_ERROR = abs(SIN2_THETA_W_UCF - SIN2_THETA_W_REF) / SIN2_THETA_W_REF
+    M_P_M_E_UCF = (27 * (BETA ** 2) * PI_OVER_SQRT2 * TAU_TORSION) / ((BETA ** 3) * ALPHA_GEOM_INV)
+    M_P_M_E_REF = 1836.15267343
+    M_P_M_E_ERROR = abs(M_P_M_E_UCF - M_P_M_E_REF) / M_P_M_E_REF
+    G_UCF = (BETA ** 2) * PI_OVER_SQRT2 * KAPPA_M * (1e11)
+    G_REF = 6.67430e-11
+    G_ERROR = abs(G_UCF - G_REF) / G_REF
+    C_UCF = 299792458
+    C_REF = 299792458
+    C_ERROR = 0.0
+    C_MAX = ALPHA
+    N_CUBE = 27
+    CUBE_VOLUME = 27 ** 3
 
 # ======================================================================
 # LISTA DE CONSTANTES PARA ANÁLISIS
@@ -315,10 +334,10 @@ def test_coherence_omega_is_positive():
         assert C_omega > 0
 
 # ======================================================================
-# PRUEBAS DE VISUALIZACIÓN (opcional, no afectan el conteo de pruebas)
+# PRUEBAS DE VISUALIZACIÓN (OPCIONALES)
 # ======================================================================
 
-@pytest.mark.skip(reason="Prueba de visualización, no afecta el conteo de pruebas")
+@pytest.mark.skipif(not HAS_MATPLOTLIB or not HAS_NUMPY, reason="matplotlib o numpy no están instalados")
 def test_generate_error_vs_epsilon_plot():
     """Genera el gráfico de Error vs. ε (opcional)."""
     names = [c["name"].replace(" (", "\n(") for c in CONSTANTS]
@@ -326,7 +345,8 @@ def test_generate_error_vs_epsilon_plot():
 
     plt.figure(figsize=(16, 10))
     plt.bar(names, errors, color='skyblue', label='Error Relativo (%)')
-    plt.axhline(y=EPSILON_OBSERVER * 100, color='red', linestyle='--', linewidth=2, label=f'ε = {EPSILON_OBSERVER * 100:.2f}%')
+    plt.axhline(y=EPSILON_OBSERVER * 100, color='red', linestyle='--', linewidth=2,
+               label=f'ε = {EPSILON_OBSERVER * 100:.2f}%')
     plt.title("Error Relativo en Constantes Físicas vs. ε")
     plt.ylabel("Error Relativo (%)")
     plt.xlabel("Constante Física")
@@ -334,10 +354,10 @@ def test_generate_error_vs_epsilon_plot():
     plt.xticks(rotation=45, ha='right')
     plt.grid(True, axis='y', linestyle='--', alpha=0.7)
     plt.tight_layout()
-    plt.savefig('error_vs_epsilon.png', dpi=300, bbox_inches='tight')
+    plt.savefig(f'{TEMP_DIR}/error_vs_epsilon.png', dpi=300, bbox_inches='tight')
     plt.close()
 
-@pytest.mark.skip(reason="Prueba de visualización, no afecta el conteo de pruebas")
+@pytest.mark.skipif(not HAS_MATPLOTLIB or not HAS_NUMPY, reason="matplotlib o numpy no están instalados")
 def test_generate_phi_scaling_plot():
     """Genera el gráfico de Escalado de φ en las capas del UIS (opcional)."""
     layers = ["L0", "L1", "L2", "L3", "L4", "L5", "L6"]
@@ -352,11 +372,11 @@ def test_generate_phi_scaling_plot():
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
-    plt.savefig('phi_scaling_layers.png', dpi=300, bbox_inches='tight')
+    plt.savefig(f'{TEMP_DIR}/phi_scaling_layers.png', dpi=300, bbox_inches='tight')
     plt.close()
 
 # ======================================================================
-# FUNCIÓN PRINCIPAL PARA ANÁLISIS (opcional, no es una prueba)
+# FUNCIÓN PRINCIPAL PARA ANÁLISIS (OPCIONAL)
 # ======================================================================
 
 def calculate_relations(constants, epsilon=EPSILON_OBSERVER, phi=PHI, beta=BETA):
@@ -391,6 +411,10 @@ def calculate_relations(constants, epsilon=EPSILON_OBSERVER, phi=PHI, beta=BETA)
 
 def print_analysis_results():
     """Imprime los resultados del análisis en la consola."""
+    if not HAS_TABULATE:
+        print("⚠️ tabulate no está instalado. No se puede imprimir la tabla.")
+        return
+
     print("=" * 100)
     print("🔬 ANÁLISIS DE PATRONES EN LOS ERRORES DE LAS CONSTANTES FÍSICAS (UIS v3.3)")
     print("=" * 100)
@@ -441,28 +465,16 @@ def print_analysis_results():
     print("\n" + tabulate(table_data, headers=headers, tablefmt="grid", floatfmt=".6f"))
     print("=" * 100)
 
-    print("\n📌 RESUMEN DE PATRONES:")
-    print("-" * 100)
-    print(f"1. Λ tiene un error exactamente igual a ε ({EPSILON_OBSERVER * 100:.2f}%).")
-    print(f"2. H₀ tiene un error ≈ ε/3.1 ({EPSILON_OBSERVER / 3.1 * 100:.2f}%).")
-    print(f"3. α⁻¹ tiene un error ≈ ε/5.5 ({EPSILON_OBSERVER / 5.5 * 100:.2f}%) ≈ ε/φ².")
-    print(f"4. T_CMB tiene un error ≈ ε/8.2 ({EPSILON_OBSERVER / 8.2 * 100:.2f}%) ≈ ε/φ³.")
-    print(f"5. mₑ tiene un error ≈ ε/365 ({EPSILON_OBSERVER / 365 * 100:.6f}%) ≈ ε/φ⁵.")
-    print(f"6. Los errores escalan con potencias de φ (razón áurea).")
-    print(f"7. Las constantes derivadas de más capas tienen errores mayores.")
-    print(f"8. Los factores de escala (κ) reducen el error.")
-    print(f"9. C_Ω (coherencia estructural) varía entre β ({BETA:.4f}) y α ({ALPHA:.4f}).")
-    print("=" * 100)
-
-    with open('analisis_errores_ucf_completo.csv', 'w', newline='', encoding='utf-8') as csvfile:
+    # Guardar resultados en CSV (en el directorio temporal)
+    with open(f'{TEMP_DIR}/analisis_errores_ucf_completo.csv', 'w', newline='', encoding='utf-8') as csvfile:
         fieldnames = results[0].keys()
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(results)
-    print("\n✅ Resultados guardados en 'analisis_errores_ucf_completo.csv'.")
+    print(f"\n✅ Resultados guardados en '{TEMP_DIR}/analisis_errores_ucf_completo.csv'.")
 
 # ======================================================================
-# CONFIGURACIÓN PARA EJECUCIÓN DIRECTA (opcional)
+# CONFIGURACIÓN PARA EJECUCIÓN DIRECTA (OPCIONAL)
 # ======================================================================
 
 if __name__ == "__main__":

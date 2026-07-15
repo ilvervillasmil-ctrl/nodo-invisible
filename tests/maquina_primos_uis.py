@@ -1,4 +1,6 @@
 import math
+import pytest
+from typing import List
 
 def is_prime_mr(n, k=8):
     """Miller-Rabin (rápido y confiable para números grandes)"""

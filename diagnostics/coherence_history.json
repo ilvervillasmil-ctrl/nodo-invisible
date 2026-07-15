@@ -1,22 +1,5 @@
 [
   {
-    "timestamp": "2026-07-07 06:14:31 UTC",
-    "sha": "6ae4911",
-    "total": 248,
-    "passed": 248,
-    "failed": 0,
-    "skipped": 0,
-    "pass_rate": 100.0
-  },
-  {
-    "timestamp": "2026-07-07T06:16:18.198475+00:00",
-    "passed": 248,
-    "failed": 0,
-    "total": 248,
-    "pass_rate": 100.0,
-    "c_structural": 0.7395732914978297
-  },
-  {
     "timestamp": "2026-07-07 06:16:18 UTC",
     "sha": "b747df6",
     "total": 248,
@@ -427,6 +410,23 @@
   {
     "timestamp": "2026-07-15 06:59:28 UTC",
     "sha": "c27fffc",
+    "total": 294,
+    "passed": 294,
+    "failed": 0,
+    "skipped": 0,
+    "pass_rate": 100.0
+  },
+  {
+    "timestamp": "2026-07-15T07:02:50.434423+00:00",
+    "passed": 294,
+    "failed": 0,
+    "total": 294,
+    "pass_rate": 100.0,
+    "c_structural": 0.7395732914978297
+  },
+  {
+    "timestamp": "2026-07-15 07:02:50 UTC",
+    "sha": "3c5ffd8",
     "total": 294,
     "passed": 294,
     "failed": 0,

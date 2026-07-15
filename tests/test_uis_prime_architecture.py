@@ -9,7 +9,6 @@ Suite maestra para el Mapeo de Densidad y Resonancia.
 
 import numpy as np
 import pytest
-import sympy as sp
 
 # ==========================================================
 # PARÁMETROS UIS
@@ -18,8 +17,27 @@ MODULOS_UIS = [5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47]
 VENTANA = 100000
 
 # ==========================================================
-# GENERADORES
+# GENERADORES AUTÓNOMOS
 # ==========================================================
+def es_primo_interno(n):
+    """Primalidad autónoma (Miller-Rabin) sin dependencias externas."""
+    if n < 2: return False
+    for p in [2, 3, 5, 7, 11, 13, 17, 19]:
+        if n % p == 0: return n == p
+    d = n - 1
+    s = 0
+    while d % 2 == 0:
+        d //= 2
+        s += 1
+    for a in [2, 3, 5, 7, 11, 13, 17, 19]:
+        x = pow(a, d, n)
+        if x == 1 or x == n - 1: continue
+        for _ in range(s - 1):
+            x = pow(x, 2, n)
+            if x == n - 1: break
+        else: return False
+    return True
+
 def nodo_hexagonal(k):
     return 6 * k + 1
 
@@ -74,8 +92,8 @@ def test_estructura_gaps():
 
 def test_simetria_6k():
     limite = 100000
-    positivos = sum(1 for k in range(2, limite) if sp.isprime(nodo_hexagonal(k)))
-    negativos = sum(1 for k in range(2, limite) if sp.isprime(nodo_espejo(k)))
+    positivos = sum(1 for k in range(2, limite) if es_primo_interno(nodo_hexagonal(k)))
+    negativos = sum(1 for k in range(2, limite) if es_primo_interno(nodo_espejo(k)))
     diferencia = abs(positivos - negativos)
     print(f"\n[UIS-SIMETRIA] 6k+1: {positivos} | 6k-1: {negativos} | Dif: {diferencia}")
     assert positivos > 0
@@ -84,7 +102,7 @@ def test_simetria_6k():
 def test_supervivencia_vs_primos():
     inicio = 10**10
     candidatos = generar_supervivientes(inicio, 100000, MODULOS_UIS)
-    primos = [n for n in candidatos if sp.isprime(n)]
+    primos = [n for n in candidatos if es_primo_interno(n)]
     eficiencia = len(primos) / len(candidatos)
     print(f"\n[UIS-FILTRO] Eficiencia: {eficiencia}")
     assert len(candidatos) > 0

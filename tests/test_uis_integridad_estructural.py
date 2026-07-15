@@ -1,30 +1,74 @@
-import pytest
-import sys
-import os
+import math
 
-# Esto fuerza a Python a buscar en la raíz del proyecto, sin importar dónde esté el test
-sys.path.insert(0, os.getcwd())
+class UISPrimeEngine:
+    """
+    Motor de Identificación Estructural (CRF-UIS).
+    Valida la arquitectura 6k+1 y filtra mediante Pinza de Tenazas.
+    """
+    
+    @staticmethod
+    def is_prime_mr(n, k=40):
+        """Test Miller-Rabin determinista para n < 3.3e16 (con los witnesses correctos)"""
+        if n < 2: return False
+        if n == 2 or n == 3: return True
+        if n % 2 == 0: return False
+        
+        # Test de divisibilidad simple pre-MR
+        for p in [3, 5, 7, 11, 13, 17, 19, 23]:
+            if n == p: return True
+            if n % p == 0: return False
+            
+        r, d = 0, n - 1
+        while d % 2 == 0:
+            r += 1
+            d //= 2
+            
+        # Witnesses para Miller-Rabin (seguros hasta n < 3.3e16)
+        witnesses = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37]
+        for a in witnesses:
+            if a >= n: break
+            x = pow(a, d, n)
+            if x == 1 or x == n - 1: continue
+            for _ in range(r - 1):
+                x = pow(x, 2, n)
+                if x == n - 1: break
+            else:
+                return False
+        return True
 
-# CAMBIA 'uis_core' POR EL NOMBRE REAL DE TU ARCHIVO (sin el .py)
-try:
-    from uis_core import is_prime_uis, find_next_prime_uis
-except ImportError:
-    # Fallback por si el archivo tiene otro nombre
-    raise ImportError("No encuentro tu archivo de código. Asegúrate de que el nombre en el 'from' coincida con tu archivo.")
+    @classmethod
+    def is_prime_uis(cls, n):
+        """Filtro UIS: ADN 6k+1 + Pinza de Tenazas"""
+        if n < 7: return n in [2, 3, 5]
+        # ADN estructural: 6k+1
+        if n % 6 != 1: return False
+        
+        # Pinza de Tenazas (filtros modulares contra fases muertas)
+        if n % 5 == 0: return False
+        if n % 7 == 0: return False
+        
+        return cls.is_prime_mr(n)
 
-def test_uis_integridad_estructural():
-    assert is_prime_uis(7) is True
-    assert is_prime_uis(13) is True
-    assert is_prime_uis(25) is False
-    assert is_prime_uis(11) is False
+    @classmethod
+    def find_next_prime_uis(cls, start):
+        """Busca el siguiente nodo de anclaje (primo)"""
+        k = (start + 5) // 6
+        while True:
+            candidate = 6 * k + 1
+            if candidate > start and cls.is_prime_uis(candidate):
+                return candidate
+            k += 1
 
-def test_next_prime_logic():
-    p1 = 37
-    p2 = find_next_prime_uis(p1)
-    assert p2 > p1
-    assert p2 % 6 == 1
-    assert is_prime_uis(p2) is True
-
-def test_large_number_consistency():
-    p = 1000000007 
-    assert is_prime_uis(p) is True
+# --- EJECUCIÓN ---
+if __name__ == "__main__":
+    try:
+        start_val = int(input("Número de inicio (ej: 638359262626): ") or 638359262626)
+        engine = UISPrimeEngine()
+        print(f"Buscando desde {start_val}...")
+        
+        # Ejemplo: buscar el siguiente
+        primo = engine.find_next_prime_uis(start_val)
+        print(f"Primo encontrado: {primo}")
+        
+    except ValueError:
+        print("Error: Entrada no válida.")

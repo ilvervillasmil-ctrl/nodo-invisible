@@ -2,11 +2,15 @@ import pytest
 import sys
 import os
 
-# Fuerza a Python a mirar en la raíz del repositorio
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+# Esto fuerza a Python a buscar en la raíz del proyecto, sin importar dónde esté el test
+sys.path.insert(0, os.getcwd())
 
-# CAMBIA 'NOMBRE_DE_TU_ARCHIVO' por el nombre real SIN el .py
-from NOMBRE_DE_TU_ARCHIVO import is_prime_uis, find_next_prime_uis
+# CAMBIA 'uis_core' POR EL NOMBRE REAL DE TU ARCHIVO (sin el .py)
+try:
+    from uis_core import is_prime_uis, find_next_prime_uis
+except ImportError:
+    # Fallback por si el archivo tiene otro nombre
+    raise ImportError("No encuentro tu archivo de código. Asegúrate de que el nombre en el 'from' coincida con tu archivo.")
 
 def test_uis_integridad_estructural():
     assert is_prime_uis(7) is True

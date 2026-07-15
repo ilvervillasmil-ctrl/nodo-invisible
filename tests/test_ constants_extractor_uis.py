@@ -11,7 +11,7 @@ def test_convergencia_estructural_10_200():
     """
     inicio = 10**200
     ventana = 10**6 
-    muestras = 20000 # Aumentamos resolución para capturar la oscilación
+    muestras = 80000000 # Aumentamos resolución para capturar la oscilación
     
     supervivientes = 0
     for _ in range(muestras):

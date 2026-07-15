@@ -1,41 +1,50 @@
 import numpy as np
 
-def extraer_constantes_uis():
+def extraer_constantes_fisicas_UIS(inicio, ventana):
     """
-    Extrae los invariantes fundamentales del retículo hexagonal.
-    Estas constantes definen la resonancia y la densidad estructural.
+    Extrae constantes físicas reales observando el comportamiento
+    dinámico de los primos en el retículo hexagonal (6k ± 1).
     """
+    k0 = (inicio + 5) // 6
+    k1 = (inicio + ventana) // 6
     
-    # Constantes base del cubo 3x3x3
-    BETA = 1/27
-    ALPHA = 26/27
-    PHI = (1 + np.sqrt(5)) / 2
+    # 1. GENERACIÓN DE DATOS CRUDOS
+    # Filtro de fase inicial para obtener el comportamiento del sistema
+    nodos = []
+    for k in range(k0, k1 + 1):
+        n = 6*k + 1
+        # Filtro de fase ultra-fino para obtener densidad pura
+        if all(n % m != 0 for m in [5, 7, 11, 13, 17, 19, 23, 29, 31]):
+            nodos.append(n)
+            
+    nodos = np.array(nodos)
+    gaps = np.diff(nodos)
     
-    # Cálculo de la Frecuencia fundamental (Omega efectiva)
-    # Basada en la resonancia de fase del retículo
-    OMEGA_EFF = np.pi * (1 - np.sqrt(BETA))
+    # 2. EXTRACCIÓN DE CONSTANTES (La física del retículo)
     
-    # Cálculo de la Constante de fricción de fases (Phi efectiva)
-    # Refleja la resistencia estructural medida en el sistema
-    PHI_EFF = 1 / (1 - np.sqrt(BETA) * (np.pi/6))
+    # Constante de Densidad de Fase (Mu_phi)
+    # Proporción de nodos que sobreviven a la interferencia
+    mu_phi = len(nodos) / (ventana / 6)
     
-    # Cálculo del Período de oscilación del sistema
-    T_PERIOD = 2 * np.pi / OMEGA_EFF
+    # Constante de Resonancia de Brecha (Omega_gap)
+    # Frecuencia fundamental medida vía FFT de los gaps
+    fft = np.abs(np.fft.fft(gaps))
+    freqs = np.fft.fftfreq(len(gaps))
+    # Nos quedamos con la componente armónica dominante
+    idx = np.argmax(fft[1:]) + 1
+    omega_gap = np.abs(freqs[idx])
     
-    constantes = {
-        "BETA_residuo": BETA,
-        "ALPHA_estructura": ALPHA,
-        "PHI_friccion": PHI,
-        "OMEGA_frecuencia": OMEGA_EFF,
-        "PHI_efectiva": PHI_EFF,
-        "T_periodo_oscilacion": T_PERIOD
-    }
+    # Constante de Fricción de Fase (Zeta_friction)
+    # Desviación estándar de los gaps normalizada por la media
+    zeta_friction = np.std(gaps) / np.mean(gaps)
     
-    print("--- INVARIANTES ESTRUCTURALES DEL RETÍCULO (UIS) ---")
-    for k, v in constantes.items():
-        print(f"{k}: {v:.6f}")
+    print(f"\n--- CONSTANTES FÍSICAS EXTRAÍDAS EN {inicio} ---")
+    print(f"Densidad de Fase (mu_phi):   {mu_phi:.6f}")
+    print(f"Resonancia Gap (omega_gap):  {omega_gap:.6f}")
+    print(f"Fricción de Fase (zeta_fric): {zeta_friction:.6f}")
     
-    return constantes
+    return {"mu": mu_phi, "omega": omega_gap, "zeta": zeta_friction}
 
 if __name__ == "__main__":
-    extraer_constantes_uis()
+    # Escaneamos una ventana profunda para extraer valores reales
+    extraer_constantes_fisicas_UIS(inicio=10**20, ventana=10**7)

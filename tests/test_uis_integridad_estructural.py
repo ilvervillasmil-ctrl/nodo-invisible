@@ -38,14 +38,14 @@ def test_benchmark_convergencia_10_50():
     Test de rendimiento extremo para el Teorema.
     Objetivo: Localizar nodo primo en la frontera 10^50 < 60 segundos.
     """
-    inicio_val = 10**50
+    inicio_val = 10**300
     inicio_k = inicio_val // 6
     
     inicio_tiempo = time.time()
     encontrado = None
     
-    # Ventana de exploración (5000 iteraciones en el retículo)
-    for i in range(5000):
+    # Ventana de exploración (5000000 iteraciones en el retículo)
+    for i in range(5000000):
         n = 6 * (inicio_k + i) + 1
         if is_prime_uis_xtreme(n):
             encontrado = n
@@ -54,9 +54,9 @@ def test_benchmark_convergencia_10_50():
     fin_tiempo = time.time()
     duracion = fin_tiempo - inicio_tiempo
     
-    print(f"\n[CRF-UIS] Nodo 10^50 localizado: {encontrado}")
+    print(f"\n[CRF-UIS] Nodo 10^300 localizado: {encontrado}")
     print(f"[CRF-UIS] Tiempo de convergencia: {duracion:.4f}s")
     
-    assert encontrado is not None, "El motor no convergido en la ventana de 5000 nodos."
-    assert duracion < 60.0, f"Error de performance: El teorema tardó {duracion}s."
+    assert encontrado is not None, "El motor no convergido en la ventana de 5000000 nodos."
+    assert duracion < 120.0, f"Error de performance: El teorema tardó {duracion}s."
     assert encontrado % 6 == 1

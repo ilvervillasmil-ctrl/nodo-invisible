@@ -1,8 +1,6 @@
 import pytest
 import numpy as np
 
-# Punto de equilibrio asintótico detectado (ajustable según la deriva)
-DENSIDAD_ASINTOTICA = 0.4153 
 
 def test_convergencia_estructural_10_200():
     """
@@ -31,6 +29,6 @@ def test_convergencia_estructural_10_200():
     print(f"\n[UIS-COSMIC-200] Densidad: {densidad_medida}")
     print(f"[UIS-COSMIC-200] Error: {error}")
     
-    # Falsabilidad: Si el sistema es armónico, el error debe oscilar.
+   
     # Si la oscilación excede 0.1, el retículo está entrando en modo caótico.
     assert error < 0.1, f"Colapso de fase: deriva excesiva {error}"

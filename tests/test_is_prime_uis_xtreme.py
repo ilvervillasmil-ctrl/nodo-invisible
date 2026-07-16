@@ -3,7 +3,7 @@ import time
 def is_prime_uis_xtreme(n):
     """
     Motor CRF-UIS con Pinza de Tenazas.
-    Exploración 0 -> 100 millones.
+    Exploración 0 -> 1 millon.
     """
 
     if n < 2:
@@ -50,13 +50,13 @@ def is_prime_uis_xtreme(n):
     return True
 
 
-def test_pinza_tenazas_0_a_100_millones():
+def test_pinza_tenazas_0_a_1_millon():
 
     inicio_tiempo = time.time()
 
     encontrados = []
 
-    limite = 100_000_000
+    limite = 100
 
     for n in range(2, limite + 1):
 

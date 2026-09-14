@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 OMEGA REPORT v2.6
 Genera un reporte diagnóstico honesto del sistema a partir del propio repositorio.
@@ -77,7 +76,7 @@ REPO_ROOT = DIAGNOSTICS_DIR.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-VERSION = "2.6.5"
+VERSION = "2.6.6"
 
 SECRET_KEYS = ("password", "secret", "token", "api_key", "apikey", "private_key")
 SKIP_DIAG_NAMES = {
@@ -495,33 +494,8 @@ def discover_audit() -> dict:
                     entry["stdout"] = buf.getvalue()
             modules.append(entry)
 
-    tests_dir = REPO_ROOT / "tests"
-    skip_test_bits = ("prime", "primal", "100000000", "million", "bench", "perf")
-    want_test_bits = ("dual", "ucf", "yuct", "cosmo", "electron", "hubble", "lambda", "omega", "audit", "const", "weinberg", "cmb", "observer", "matter", "frecuencia", "energy")
-    if tests_dir.exists():
-        for path in sorted(tests_dir.rglob("*.py")):
-            low = path.name.lower()
-            if any(b in low for b in skip_test_bits):
-                continue
-            if not any(b in low for b in want_test_bits):
-                continue
-            rel = str(path.relative_to(REPO_ROOT))
-            name = _mod_from_rel(rel)
-            if not name:
-                continue
-            buf = io.StringIO()
-            entry = {"name": name, "path": rel, "importable": False, "symbols": [], "error": None, "stdout": ""}
-            try:
-                with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
-                    imported = importlib.import_module(name)
-                entry["stdout"] = buf.getvalue()
-                entry["importable"] = True
-                import_ok += 1
-            except Exception as e:
-                entry["stdout"] = buf.getvalue()
-                entry["error"] = "{0}: {1}".format(type(e).__name__, e)
-                import_fail += 1
-            modules.append(entry)
+    # Los tests no se reimportan por nombre.
+    # Autoridad: diagnostics/test_results.xml (system-out de CADA testcase).
 
     skip = {".git", ".hg", ".svn", "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".venv", "venv", "node_modules", ".tox"}
     repo_files = []
@@ -1084,9 +1058,11 @@ def read_executed_tests() -> dict:
         errors += e
         skipped += k
         duration += dur
+        s_out = s.find("system-out")
         suite_rows.append({
             "name": s.get("name"), "tests": t, "failures": f, "errors": e,
             "skipped": k, "passed": t - f - e - k, "time": dur,
+            "stdout": (s_out.text or "") if s_out is not None else "",
         })
         for tc in s.iter("testcase"):
             status = "passed"
@@ -3071,6 +3047,14 @@ def build_report():
     executed = read_executed_tests() if "read_executed_tests" in globals() else {}
     audit = discover_audit()
     captured = []
+    for s in (executed.get("suites") or []):
+        text = (s.get("stdout") or "").strip()
+        if text:
+            captured.append({
+                "case": "suite::{0}".format(s.get("name") or "pytest"),
+                "status": "suite",
+                "stdout": text,
+            })
     for c in (executed.get("cases") or []):
         text = (c.get("stdout") or "").strip()
         if text:

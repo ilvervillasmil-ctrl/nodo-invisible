@@ -43,9 +43,9 @@ def _check_module_completeness() -> float:
     return loaded / len(_CRITICAL_MODULES)
 
 
-class LayerIntegrity:
+class Layerself:
     """
-    L4 — Integridad.
+    L4 — self.
 
     Auto-inicialización: verifica los invariantes estructurales del sistema
     y la completitud de módulos críticos.
@@ -60,7 +60,7 @@ class LayerIntegrity:
     """
 
     def __init__(self, lower_layers: Optional[list] = None):
-        self.name = "Integrity"
+        self.name = "self"
         self.L, self.phi = self._compute_base()
 
     @staticmethod

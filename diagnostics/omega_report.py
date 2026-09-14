@@ -76,7 +76,7 @@ REPO_ROOT = DIAGNOSTICS_DIR.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-VERSION = "2.6.6"
+VERSION = "2.6.7"
 
 SECRET_KEYS = ("password", "secret", "token", "api_key", "apikey", "private_key")
 SKIP_DIAG_NAMES = {
@@ -494,8 +494,42 @@ def discover_audit() -> dict:
                     entry["stdout"] = buf.getvalue()
             modules.append(entry)
 
-    # Los tests no se reimportan por nombre.
-    # Autoridad: diagnostics/test_results.xml (system-out de CADA testcase).
+    tests_dir = REPO_ROOT / "tests"
+    skip_heavy = ("100000000", "100_000_000", "million", "bench", "perf")
+    if tests_dir.exists():
+        for path in sorted(tests_dir.rglob("*.py")):
+            if path.name == "__init__.py":
+                continue
+            low = path.name.lower() + " " + str(path).lower()
+            if any(b in low for b in skip_heavy):
+                continue
+            rel = str(path.relative_to(REPO_ROOT))
+            name = _mod_from_rel(rel)
+            if not name:
+                continue
+            buf = io.StringIO()
+            entry = {"name": name, "path": rel, "importable": False, "symbols": [], "error": None, "stdout": ""}
+            try:
+                with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
+                    imported = importlib.import_module(name)
+                    for hook in ("demo", "run_demo", "audit", "report"):
+                        fn = getattr(imported, hook, None)
+                        if not callable(fn):
+                            continue
+                        try:
+                            fn()
+                        except TypeError:
+                            continue
+                        except Exception:
+                            continue
+                entry["stdout"] = buf.getvalue()
+                entry["importable"] = True
+                import_ok += 1
+            except Exception as e:
+                entry["stdout"] = buf.getvalue()
+                entry["error"] = "{0}: {1}".format(type(e).__name__, e)
+                import_fail += 1
+            modules.append(entry)
 
     skip = {".git", ".hg", ".svn", "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".venv", "venv", "node_modules", ".tox"}
     repo_files = []

@@ -1,26 +1,30 @@
 #!/usr/bin/env python3
 """
-OMEGA REPORT v2.4
-Genera un reporte diagnóstico honesto del sistema a partir del propio repositorio.
+OMEGA REPORT — Extreme Audit Renderer
+Universal Integration System
 
-Changelog v2.4:
-  - AGREGA: medición real de capas si existen en layers/*
-  - AGREGA: distribución energética real L0-L6
-  - AGREGA: entropía Shannon base 7 y armonía real
-  - AGREGA: medición híbrida de C_structural con fuente explícita
-  - AGREGA: escritura automática de coherence_history.json
-  - MANTIENE: L7 emergente, torus_formula y todo lo ya existente
-  - CORRIGE: validación cosmológica extendida (Λ + Hubble)
-  - CORRIGE: integración de cosmology en build_report()
+Contrato:
+  1. Descubrir / pedir paquete estructurado.
+  2. Serializar el MISMO paquete a JSON.
+  3. Renderizar el MISMO paquete a Markdown.
+  4. Emitir un resumen compacto a stdout CI.
+  Nunca: Markdown → regex → JSON.
+
+Omega no inventa el estado. Si Engine.paquete_omega() existe, esa es la autoridad.
+Si no, Omega construye un paquete de descubrimiento local y lo etiqueta como tal.
 """
 
 from __future__ import annotations
 
+import ast
+import hashlib
+import importlib
 import json
 import math
 import os
-import re
+import platform
 import sys
+import traceback
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from pathlib import Path
@@ -28,1625 +32,1370 @@ from typing import Any
 
 
 # =============================================================================
-# PATH SETUP
+# PATH
 # =============================================================================
 
 CURRENT_FILE = Path(__file__).resolve()
 DIAGNOSTICS_DIR = CURRENT_FILE.parent
 REPO_ROOT = DIAGNOSTICS_DIR.parent
-
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+OMEGA_VERSION = "3.0-extreme-audit"
+SCHEMA_VERSION = "omega.paquete.1"
+
+SKIP_DIR_NAMES = {
+    ".git", ".hg", ".svn", "__pycache__", ".pytest_cache", ".mypy_cache",
+    ".ruff_cache", ".venv", "venv", "node_modules", ".tox",
+}
+SECRET_MARKERS = (
+    "TOKEN", "SECRET", "PASSWORD", "PASSWD", "APIKEY", "API_KEY",
+    "PRIVATE_KEY", "CREDENTIAL", "AWS_SECRET", "AUTHORIZATION",
+)
+
+ICON_OK = "✅"
+ICON_FAIL = "❌"
+ICON_WARN = "⚠️"
+ICON_INFO = "ℹ️"
+ICON_ITEM = "🔹"
+ICON_ENGINE = "🧩"
+ICON_REPO = "📦"
+ICON_MOD = "📜"
+ICON_VAR = "🔢"
+ICON_TEST = "🧪"
+ICON_LAYER = "📶"
+ICON_FIND = "🚨"
+ICON_HIST = "❤️"
+ICON_GRAPH = "🔗"
+ICON_FORM = "📐"
+ICON_LOCK = "🔐"
+ICON_SRC = "📡"
+ICON_COV = "📊"
+ICON_DOM = "📚"
+ICON_OMEGA = "Ω"
+
+W = "════════════════════════════════════════════"
+S = "────────────────────────────────────────────"
+
 
 # =============================================================================
-# SAFE IMPORT HELPERS
+# FINDINGS
 # =============================================================================
 
-def safe_import(module_name: str) -> Any | None:
+FINDINGS: list[dict[str, Any]] = []
+
+
+def finding(
+    severity: str,
+    category: str,
+    component: str,
+    message: str,
+    source: str = "omega",
+    evidence: Any = None,
+) -> None:
+    entry = {
+        "severity": severity,
+        "category": category,
+        "component": component,
+        "source": source,
+        "message": message,
+    }
+    if evidence is not None:
+        entry["evidence"] = _safe(evidence)
+    FINDINGS.append(entry)
+
+
+def pv(value: Any, source: str, source_type: str, measured: bool, fallback: bool = False, raw: Any = None) -> dict[str, Any]:
+    return {
+        "value": value,
+        "raw": raw if raw is not None else value,
+        "source": source,
+        "source_type": source_type,
+        "measured": measured,
+        "fallback": fallback,
+    }
+
+
+# =============================================================================
+# SAFE HELPERS — nunca silencian
+# =============================================================================
+
+def _is_secret_name(name: str) -> bool:
+    up = name.upper()
+    return any(m in up for m in SECRET_MARKERS)
+
+
+def _safe(value: Any, name: str = "") -> Any:
+    if _is_secret_name(name):
+        return "[REDACTED]"
+    if value is None or isinstance(value, (bool, int, float, str)):
+        if isinstance(value, str) and len(value) > 4000:
+            return value[:4000] + "…"
+        return value
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, (list, tuple, set)):
+        return [_safe(x) for x in list(value)[:200]]
+    if isinstance(value, dict):
+        return {str(k): _safe(v, str(k)) for k, v in list(value.items())[:200]}
     try:
-        return __import__(module_name, fromlist=["*"])
+        json.dumps(value, default=str)
+        return value
     except Exception:
+        return {"type": type(value).__name__, "repr": repr(value)[:300]}
+
+
+def try_import(module_name: str) -> dict[str, Any]:
+    try:
+        mod = importlib.import_module(module_name)
+        return {"success": True, "module": mod, "error_type": None, "error_message": None}
+    except Exception as e:
+        finding("ERROR", "module_import", module_name, "{0}: {1}".format(type(e).__name__, e))
+        return {
+            "success": False,
+            "module": None,
+            "error_type": type(e).__name__,
+            "error_message": str(e),
+        }
+
+
+# =============================================================================
+# STATIC INVENTORY
+# =============================================================================
+
+def _iter_files(root: Path) -> list[Path]:
+    out: list[Path] = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d not in SKIP_DIR_NAMES]
+        base = Path(dirpath)
+        for name in filenames:
+            out.append(base / name)
+    return out
+
+
+def _sha256(path: Path) -> str | None:
+    try:
+        h = hashlib.sha256()
+        with path.open("rb") as fh:
+            for chunk in iter(lambda: fh.read(65536), b""):
+                h.update(chunk)
+        return h.hexdigest()
+    except Exception as e:
+        finding("WARNING", "hash", str(path), str(e))
         return None
 
 
-def get_attr(module: Any | None, attr_name: str, default: Any) -> Any:
-    if module is None:
-        return default
-    return getattr(module, attr_name, default)
+def _ext_bucket(path: Path) -> str:
+    ext = path.suffix.lower()
+    if ext == ".py":
+        return "python"
+    if ext == ".md":
+        return "markdown"
+    if ext == ".json":
+        return "json"
+    if ext in {".yml", ".yaml"}:
+        return "yaml"
+    if ext == ".toml":
+        return "toml"
+    if ext == ".txt":
+        return "txt"
+    if ext in {".so", ".bin", ".exe", ".dll", ".dylib", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".pdf"}:
+        return "binary"
+    return "other"
 
 
-def clamp(x: float, lo: float, hi: float) -> float:
-    return max(lo, min(hi, x))
-
-
-def safe_float(x: Any, default: float = 0.0) -> float:
+def _parse_python(path: Path) -> dict[str, Any]:
+    rec: dict[str, Any] = {
+        "path": str(path.relative_to(REPO_ROOT)),
+        "lines": 0,
+        "classes": [],
+        "functions": [],
+        "public_assigns": [],
+        "imports": [],
+        "parse_ok": False,
+        "parse_error": None,
+    }
     try:
-        return float(x)
-    except Exception:
-        return default
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except Exception as e:
+        rec["parse_error"] = str(e)
+        finding("ERROR", "read", rec["path"], str(e))
+        return rec
+    rec["lines"] = text.count("\n") + (0 if text.endswith("\n") or not text else 1)
+    try:
+        tree = ast.parse(text)
+        rec["parse_ok"] = True
+    except SyntaxError as e:
+        rec["parse_error"] = "SyntaxError: {0}".format(e)
+        finding("ERROR", "parse", rec["path"], rec["parse_error"])
+        return rec
+    for node in tree.body:
+        if isinstance(node, ast.Import):
+            for a in node.names:
+                rec["imports"].append({"kind": "import", "name": a.name})
+        elif isinstance(node, ast.ImportFrom):
+            rec["imports"].append({
+                "kind": "from",
+                "module": node.module,
+                "names": [a.name for a in node.names],
+            })
+        elif isinstance(node, ast.ClassDef):
+            rec["classes"].append({
+                "name": node.name,
+                "line": node.lineno,
+                "bases": [ast.unparse(b) if hasattr(ast, "unparse") else getattr(b, "id", "?") for b in node.bases],
+                "methods": [n.name for n in node.body if isinstance(n, ast.FunctionDef) and not n.name.startswith("_")],
+                "doc": ast.get_docstring(node) or "",
+            })
+        elif isinstance(node, ast.FunctionDef):
+            rec["functions"].append({
+                "name": node.name,
+                "line": node.lineno,
+                "args": [a.arg for a in node.args.args],
+                "public": not node.name.startswith("_"),
+                "doc": (ast.get_docstring(node) or "")[:240],
+            })
+        elif isinstance(node, ast.Assign):
+            for t in node.targets:
+                if isinstance(t, ast.Name) and not t.id.startswith("_"):
+                    rec["public_assigns"].append({"name": t.id, "line": node.lineno})
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            if not node.target.id.startswith("_"):
+                rec["public_assigns"].append({"name": node.target.id, "line": node.lineno})
+    return rec
 
 
-# =============================================================================
-# FALLBACK CONSTANTS
-# =============================================================================
-
-DEFAULT_ALPHA = 26 / 27
-DEFAULT_BETA = 1 / 27
-DEFAULT_PHI = (1 + math.sqrt(5)) / 2
-DEFAULT_S_REF = math.e / math.pi
-DEFAULT_R_FIN = 1 + DEFAULT_BETA
-DEFAULT_KAPPA = math.pi / 4
-DEFAULT_GOLDEN_ANG = 360 / (DEFAULT_PHI ** 2)
-DEFAULT_THETA_CUBE_RAD = math.asin(1 / math.sqrt(27))
-DEFAULT_THETA_CUBE_DEG = math.degrees(DEFAULT_THETA_CUBE_RAD)
-
-DEFAULT_OMEGA_EFF = math.pi * (1 - math.sqrt(DEFAULT_BETA))
-DEFAULT_OMEGA_D = math.sqrt(math.pi**2 - 0.22**2 / 4)
-DEFAULT_T_PERIOD = 2 * math.pi / DEFAULT_OMEGA_D
-DEFAULT_LAMBDA_UCF = DEFAULT_BETA ** (math.pi / DEFAULT_BETA + DEFAULT_BETA * DEFAULT_PHI**2)
-DEFAULT_OMEGA_RED = (math.pi / math.e) * (1 - DEFAULT_BETA**2)
-DEFAULT_S_REF_7 = DEFAULT_S_REF + DEFAULT_BETA * math.log(7)
-
-DEFAULT_ENERGY_FACTORS = {
-    "L0": 0.9000,
-    "L1": 1.2466,
-    "L2": 1.5371,
-    "L3": 1.9964,
-    "L4": 2.5918,
-    "L5": 3.2969,
-    "L6": 4.2361,
-}
-
-# L0-L6: fricciones originales
-# L7: phi=0.0 — es emergente, no tiene fricción propia
-LAYER_FRICTIONS = {
-    "L0": 0.10,
-    "L1": 0.02,
-    "L2": 0.05,
-    "L3": 0.03,
-    "L4": 0.01,
-    "L5": 0.01,
-    "L6": 0.00,
-    "L7": 0.00,
-}
-
-LAYER_NAMES = {
-    "L0": "Chaos",
-    "L1": "Body",
-    "L2": "Ego",
-    "L3": "Mind",
-    "L4": "Self",
-    "L5": "Metaconsciousness",
-    "L6": "Purpose/Soul",
-    "L7": "Integration",
-}
-
-LAYER_HEALTHY_RANGES = {
-    "L0": (0.00, 1.00),
-    "L1": (0.55, 0.75),
-    "L2": (0.20, 0.60),
-    "L3": (0.65, 0.85),
-    "L4": (0.75, 0.95),
-    "L5": (0.85, 1.00),
-    "L6": (0.95, 1.00),
-    "L7": (0.00, DEFAULT_ALPHA),
-}
-
-C_THRESHOLD_MAX = 0.962962962962963
-C_THRESHOLD_CRITICAL = 0.720
-C_THRESHOLD_SURVIVAL = 0.100
-
-# Valores de referencia del toroide ya documentados en tu framework
-E_M6_PAPER = 5.49e-7
-E_M7_PAPER = 8.20e-7
-
-
-# =============================================================================
-# LOAD REAL CONSTANTS IF PRESENT
-# =============================================================================
-
-formulas_constants = safe_import("formulas.constants")
-
-ALPHA = float(get_attr(formulas_constants, "ALPHA", DEFAULT_ALPHA))
-BETA = float(get_attr(formulas_constants, "BETA", DEFAULT_BETA))
-PHI = float(get_attr(formulas_constants, "PHI", DEFAULT_PHI))
-S_REF = float(get_attr(formulas_constants, "S_REF", DEFAULT_S_REF))
-R_FIN = float(get_attr(formulas_constants, "R_FIN", DEFAULT_R_FIN))
-KAPPA = float(get_attr(formulas_constants, "KAPPA", DEFAULT_KAPPA))
-GOLDEN_ANG = float(get_attr(formulas_constants, "GOLDEN_ANG", DEFAULT_GOLDEN_ANG))
-OMEGA_EFF = float(get_attr(formulas_constants, "OMEGA_EFF", DEFAULT_OMEGA_EFF))
-T_PERIOD = float(get_attr(formulas_constants, "T_PERIOD", DEFAULT_T_PERIOD))
-LAMBDA_UCF = float(get_attr(formulas_constants, "LAMBDA_UCF", DEFAULT_LAMBDA_UCF))
-OMEGA_RED = float(get_attr(formulas_constants, "OMEGA_REDUCED", DEFAULT_OMEGA_RED))
-S_REF_7 = float(get_attr(formulas_constants, "S_REF_7", DEFAULT_S_REF_7))
-
-theta_cube_value = get_attr(formulas_constants, "THETA_CUBE", DEFAULT_THETA_CUBE_RAD)
-if isinstance(theta_cube_value, (int, float)):
-    if theta_cube_value < math.pi:
-        THETA_CUBE_RAD = float(theta_cube_value)
-        THETA_CUBE_DEG = math.degrees(THETA_CUBE_RAD)
-    else:
-        THETA_CUBE_DEG = float(theta_cube_value)
-        THETA_CUBE_RAD = math.radians(THETA_CUBE_DEG)
-else:
-    THETA_CUBE_RAD = DEFAULT_THETA_CUBE_RAD
-    THETA_CUBE_DEG = DEFAULT_THETA_CUBE_DEG
-
-
-# =============================================================================
-# REAL SYSTEM MEASUREMENT HELPERS
-# =============================================================================
-
-def default_layer_states() -> dict[str, dict[str, float]]:
+def build_repository_inventory() -> dict[str, Any]:
+    files = _iter_files(REPO_ROOT)
+    summary = {
+        "files": 0,
+        "directories": 0,
+        "python": 0,
+        "markdown": 0,
+        "json": 0,
+        "yaml": 0,
+        "toml": 0,
+        "txt": 0,
+        "binary": 0,
+        "other": 0,
+        "bytes": 0,
+        "hashed": 0,
+        "unreadable": 0,
+    }
+    dirs = set()
+    file_rows: list[dict[str, Any]] = []
+    python_rows: list[dict[str, Any]] = []
+    for path in files:
+        rel = str(path.relative_to(REPO_ROOT))
+        dirs.add(str(path.parent.relative_to(REPO_ROOT)))
+        bucket = _ext_bucket(path)
+        try:
+            size = path.stat().st_size
+        except Exception:
+            size = 0
+            summary["unreadable"] += 1
+        summary["files"] += 1
+        summary["bytes"] += size
+        summary[bucket] = summary.get(bucket, 0) + 1
+        digest = None
+        if bucket in {"python", "json", "yaml"} or path.parts[0] in {"core", "formulas", "layers", "diagnostics", "tests"}:
+            digest = _sha256(path)
+            if digest:
+                summary["hashed"] += 1
+        row = {
+            "path": rel,
+            "type": bucket,
+            "bytes": size,
+            "sha256": digest,
+        }
+        file_rows.append(row)
+        if bucket == "python":
+            python_rows.append(_parse_python(path))
+    summary["directories"] = len(dirs)
     return {
-        key: {"L": 1.0, "phi": LAYER_FRICTIONS[key]}
-        for key in ["L0", "L1", "L2", "L3", "L4", "L5", "L6"]
+        "summary": summary,
+        "files": file_rows,
+        "directories": sorted(dirs),
+        "python": python_rows,
     }
 
 
-def discover_layer_states() -> tuple[dict[str, dict[str, float]], str]:
-    """
-    Intenta medir activaciones reales desde layers/*.
-    Si no puede, cae al perfil por defecto del framework.
-    """
-    states = default_layer_states()
-    layers_dir = REPO_ROOT / "layers"
-
-    if not layers_dir.exists():
-        return states, "framework-default"
-
-    found_any = False
-
-    try:
-        import importlib.util
-
-        for path in sorted(layers_dir.rglob("*.py")):
-            if path.name == "__init__.py":
-                continue
-
-            stem = path.stem.lower()
-            layer_key = None
-
-            for candidate in ["l0", "l1", "l2", "l3", "l4", "l5", "l6"]:
-                if candidate in stem:
-                    layer_key = candidate.upper()
-                    break
-
-            if layer_key is None:
-                continue
-
-            spec = importlib.util.spec_from_file_location(path.stem, path)
-            if spec is None or spec.loader is None:
-                continue
-
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-
-            instance = None
-            for attr_name in dir(module):
-                attr = getattr(module, attr_name)
-                if isinstance(attr, type):
-                    try:
-                        candidate_obj = attr()
-                        if hasattr(candidate_obj, "L") or hasattr(candidate_obj, "phi"):
-                            instance = candidate_obj
-                            break
-                    except Exception:
-                        continue
-
-            if instance is None:
-                continue
-
-            L_val = safe_float(getattr(instance, "L", states[layer_key]["L"]), states[layer_key]["L"])
-            phi_val = safe_float(getattr(instance, "phi", states[layer_key]["phi"]), states[layer_key]["phi"])
-
-            states[layer_key] = {
-                "L": clamp(L_val, 0.0, 1.0),
-                "phi": max(0.0, phi_val),
-            }
-            found_any = True
-
-    except Exception:
-        return states, "framework-default"
-
-    return (states, "layers-live" if found_any else "framework-default")
+def module_name_from_path(rel: str) -> str | None:
+    if not rel.endswith(".py"):
+        return None
+    parts = Path(rel).with_suffix("").parts
+    if parts[-1] == "__init__":
+        parts = parts[:-1]
+    if not parts:
+        return None
+    return ".".join(parts)
 
 
-def layer_states_as_list(states: dict[str, dict[str, float]]) -> list[dict[str, float]]:
-    return [states[k] for k in ["L0", "L1", "L2", "L3", "L4", "L5", "L6"]]
-
-
-def compute_energy_distribution(states: dict[str, dict[str, float]]) -> dict[str, float]:
-    energies: dict[str, float] = {}
-    for key in ["L0", "L1", "L2", "L3", "L4", "L5", "L6"]:
-        L_val = safe_float(states[key]["L"], 0.0)
-        factor = DEFAULT_ENERGY_FACTORS[key]
-        energies[key] = max(0.0, L_val * factor)
-    return energies
-
-
-def compute_entropy_from_energies(energies: dict[str, float]) -> tuple[float, float]:
-    values = [max(0.0, energies[k]) for k in ["L0", "L1", "L2", "L3", "L4", "L5", "L6"]]
-    total = sum(values)
-
-    if total <= 0:
-        return 0.0, 0.0
-
-    entropy = 0.0
-    for e in values:
-        if e <= 0:
+def collect_public_symbols(mod: Any, module_name: str) -> list[dict[str, Any]]:
+    symbols: list[dict[str, Any]] = []
+    names = [n for n in dir(mod) if not n.startswith("_")]
+    for name in names:
+        try:
+            val = getattr(mod, name)
+        except Exception as e:
+            finding("WARNING", "getattr", "{0}.{1}".format(module_name, name), str(e))
             continue
-        p = e / total
-        entropy -= p * (math.log(p) / math.log(7))
-
-    return entropy, total
-
-
-def compute_harmony_from_entropy(entropy_value: float) -> float:
-    return max(0.0, 1.0 - entropy_value / S_REF_7)
-
-
-def compute_measured_l7_from_states(states: dict[str, dict[str, float]]) -> float:
-    product = 1.0
-    for key in ["L0", "L1", "L2", "L3", "L4", "L5", "L6"]:
-        L_val = clamp(safe_float(states[key]["L"], 0.0), 0.0, 1.0)
-        phi_val = max(0.0, safe_float(states[key]["phi"], 0.0))
-        product *= max(0.0, L_val * (1.0 - phi_val))
-    return min(ALPHA, product)
-
-
-def compute_system_coherence_measured(
-    states: dict[str, dict[str, float]],
-    harmony: float,
-    l7_value: float,
-) -> tuple[float, str]:
-    """
-    1) Intenta medir desde core.engine / formulas.coherence.
-    2) Si no puede, usa fallback estructural explícito y trazable.
-    """
-    engine_mod = safe_import("core.engine")
-    if engine_mod is not None:
-        try:
-            OmegaEngine = getattr(engine_mod, "OmegaEngine", None)
-            if OmegaEngine is not None:
-                engine = OmegaEngine()
-                measured = engine.compute_coherence(layer_states_as_list(states))
-                return clamp(safe_float(measured, 0.0), 0.0, ALPHA), "core.engine"
-        except Exception:
-            pass
-
-    coherence_mod = safe_import("formulas.coherence")
-    if coherence_mod is not None:
-        try:
-            SessionStateOmega = getattr(coherence_mod, "SessionStateOmega", None)
-            if SessionStateOmega is not None:
-                session = SessionStateOmega()
-                activations = [states[k]["L"] for k in ["L0", "L1", "L2", "L3", "L4", "L5", "L6"]]
-                frictions = [states[k]["phi"] for k in ["L0", "L1", "L2", "L3", "L4", "L5", "L6"]]
-                measured = session.update(activations=activations, frictions=frictions)
-                return clamp(safe_float(measured, 0.0), 0.0, ALPHA), "formulas.coherence"
-        except Exception:
-            pass
-
-    fallback = (ALPHA * harmony) + (BETA * (l7_value / ALPHA if ALPHA > 0 else 0.0))
-    return clamp(fallback, 0.0, ALPHA), "structural-fallback"
+        kind = type(val).__name__
+        if callable(val) and not isinstance(val, type):
+            category = "function"
+            shown = getattr(val, "__name__", name)
+        elif isinstance(val, type):
+            category = "class"
+            shown = name
+        else:
+            category = "variable"
+            shown = "[REDACTED]" if _is_secret_name(name) else _safe(val, name)
+        symbols.append({
+            "name": name,
+            "module": module_name,
+            "category": category,
+            "type": kind,
+            "value": shown,
+            "redacted": _is_secret_name(name),
+        })
+    return symbols
 
 
-# =============================================================================
-# TEST DISCOVERY
-# =============================================================================
-
-def count_test_files_and_functions() -> tuple[int, int]:
-    tests_dir = REPO_ROOT / "tests"
-    if not tests_dir.exists():
-        return 0, 0
-    file_count = 0
-    test_func_count = 0
-    pattern = re.compile(r"^\s*def\s+test_[A-Za-z0-9_]*\s*\(", re.MULTILINE)
-    for path in tests_dir.rglob("test_*.py"):
-        if not path.is_file():
+def build_module_census(inventory: dict[str, Any]) -> list[dict[str, Any]]:
+    census: list[dict[str, Any]] = []
+    for py in inventory.get("python") or []:
+        rel = py.get("path") or ""
+        name = module_name_from_path(rel)
+        if not name:
             continue
-        file_count += 1
-        try:
-            text = path.read_text(encoding="utf-8", errors="ignore")
-        except Exception:
-            continue
-        test_func_count += len(pattern.findall(text))
-    return file_count, test_func_count
+        imported = try_import(name)
+        entry = {
+            "name": name,
+            "path": rel,
+            "importable": imported["success"],
+            "import_error_type": imported["error_type"],
+            "import_error": imported["error_message"],
+            "static_functions": py.get("functions") or [],
+            "static_classes": py.get("classes") or [],
+            "static_assigns": py.get("public_assigns") or [],
+            "static_imports": py.get("imports") or [],
+            "lines": py.get("lines") or 0,
+            "symbols": [],
+        }
+        if imported["success"] and imported["module"] is not None:
+            entry["docstring"] = (imported["module"].__doc__ or "")[:400]
+            entry["symbols"] = collect_public_symbols(imported["module"], name)
+        census.append(entry)
+    return census
 
 
-def parse_pytest_cache() -> dict[str, int]:
-    cache_file = REPO_ROOT / ".pytest_cache" / "v" / "cache" / "lastfailed"
-    result = {"failed": 0}
-    if not cache_file.exists():
-        return result
-    try:
-        text = cache_file.read_text(encoding="utf-8", errors="ignore").strip()
-        if not text or text == "{}":
-            return result
-        result["failed"] = text.count(": true") + text.count('": true')
-        if result["failed"] == 0 and text != "{}":
-            result["failed"] = max(1, text.count("::"))
-    except Exception:
-        result["failed"] = 0
-    return result
-
-
-def estimate_test_results() -> dict[str, int | float]:
-    xml_path = DIAGNOSTICS_DIR / "test_results.xml"
-    if xml_path.exists():
-        try:
-            tree = ET.parse(xml_path)
-            root = tree.getroot()
-            suite = root.find("testsuite") if root.tag == "testsuites" else root
-            if suite is not None:
-                total = int(suite.get("tests", 0))
-                failed = int(suite.get("failures", 0)) + int(suite.get("errors", 0))
-                skipped = int(suite.get("skipped", 0))
-                passed = total - failed - skipped
-                pass_rate = (passed / total * 100) if total > 0 else 0.0
-                file_count, _ = count_test_files_and_functions()
-                return {
-                    "file_count": file_count,
-                    "total": total,
-                    "passed": passed,
-                    "failed": failed,
-                    "skipped": skipped,
-                    "pass_rate": pass_rate,
-                }
-        except Exception:
-            pass
-
-    file_count, func_count = count_test_files_and_functions()
-    cache_info = parse_pytest_cache()
-    failed = int(cache_info.get("failed", 0))
-    skipped = 1 if (REPO_ROOT / "tests" / "test_beal_cycle_ol3.py").exists() else 0
-    total = max(func_count, 1)
-    passed = max(total - failed - skipped, 0)
+def build_dependency_graph(census: list[dict[str, Any]]) -> dict[str, Any]:
+    internal = {c["name"] for c in census}
+    internal_roots = {n.split(".")[0] for n in internal}
+    edges: list[dict[str, Any]] = []
+    unresolved: list[str] = []
+    stdlib_hint = set(getattr(sys, "stdlib_module_names", set()))
+    for c in census:
+        src = c["name"]
+        for imp in c.get("static_imports") or []:
+            target = imp.get("name") if imp.get("kind") == "import" else imp.get("module")
+            if not target:
+                continue
+            root = target.split(".")[0]
+            if root in internal or target in internal or root in internal_roots:
+                kind = "internal"
+                resolved = True
+            elif root in stdlib_hint:
+                kind = "stdlib"
+                resolved = True
+            else:
+                kind = "third-party"
+                resolved = root in sys.modules or True
+            edges.append({"from": src, "to": target, "kind": kind, "resolved": resolved})
     return {
-        "file_count": file_count,
+        "nodes": sorted(internal),
+        "edges": edges,
+        "unresolved": unresolved,
+        "cycles": [],
+    }
+
+
+# =============================================================================
+# ENGINE PACKAGE
+# =============================================================================
+
+def try_engine_package() -> tuple[dict[str, Any] | None, dict[str, Any]]:
+    state = {
+        "available": False,
+        "class": None,
+        "estado": None,
+        "error": None,
+        "paquete_from_engine": False,
+    }
+    imported = try_import("core.engine")
+    if not imported["success"]:
+        state["error"] = imported["error_message"]
+        return None, state
+    mod = imported["module"]
+    engine_cls = None
+    for cand in ("Engine", "OmegaEngine"):
+        if hasattr(mod, cand):
+            engine_cls = getattr(mod, cand)
+            state["class"] = cand
+            break
+    if engine_cls is None:
+        state["error"] = "no Engine/OmegaEngine"
+        return None, state
+    try:
+        try:
+            eng = engine_cls(Path("modules"), invocador_id="omega", strict=True)
+        except TypeError:
+            try:
+                eng = engine_cls()
+            except Exception:
+                eng = engine_cls(invocador_id="omega")
+    except Exception as e:
+        state["error"] = "{0}: {1}".format(type(e).__name__, e)
+        finding("ERROR", "engine_start", "core.engine", state["error"])
+        return None, state
+    state["available"] = True
+    state["estado"] = getattr(eng, "estado", None)
+    state["invocador_id"] = getattr(eng, "invocador_id", None)
+    state["errores_arranque"] = list(getattr(eng, "errores_arranque", []) or [])
+    attrs = {}
+    for name in dir(eng):
+        if name.startswith("_"):
+            continue
+        try:
+            val = getattr(eng, name)
+        except Exception:
+            continue
+        if callable(val):
+            continue
+        attrs[name] = _safe(val, name)
+    state["public_attrs"] = attrs
+    if hasattr(eng, "paquete_omega") and callable(eng.paquete_omega):
+        try:
+            pkg = eng.paquete_omega()
+            if isinstance(pkg, dict):
+                state["paquete_from_engine"] = True
+                return pkg, state
+        except Exception as e:
+            finding("ERROR", "paquete_omega", "core.engine", str(e))
+    return None, state
+
+
+# =============================================================================
+# TESTS / HISTORY — solo artefactos reales
+# =============================================================================
+
+def read_test_results() -> dict[str, Any]:
+    xml_path = DIAGNOSTICS_DIR / "test_results.xml"
+    static_files = []
+    tests_dir = REPO_ROOT / "tests"
+    if tests_dir.exists():
+        static_files = [str(p.relative_to(REPO_ROOT)) for p in tests_dir.rglob("test_*.py")]
+    discovered = {
+        "files": static_files,
+        "n_files": len(static_files),
+    }
+    if not xml_path.exists():
+        finding("WARNING", "tests", "diagnostics/test_results.xml", "artefacto ausente")
+        return {
+            "source": "unavailable",
+            "executed": False,
+            "discovered": discovered,
+            "total": None,
+            "passed": None,
+            "failures": None,
+            "errors": None,
+            "failed": None,
+            "skipped": None,
+            "rate": None,
+            "suites": [],
+            "cases": [],
+        }
+    try:
+        root = ET.parse(xml_path).getroot()
+    except Exception as e:
+        finding("ERROR", "tests", "diagnostics/test_results.xml", str(e))
+        return {
+            "source": "unavailable",
+            "executed": False,
+            "discovered": discovered,
+            "error": str(e),
+        }
+    suites = [root] if root.tag == "testsuite" else list(root.iter("testsuite"))
+    total = failures = errors = skipped = 0
+    suite_rows = []
+    cases = []
+    for s in suites:
+        t = int(s.get("tests", 0) or 0)
+        f = int(s.get("failures", 0) or 0)
+        e = int(s.get("errors", 0) or 0)
+        k = int(s.get("skipped", 0) or 0)
+        total += t
+        failures += f
+        errors += e
+        skipped += k
+        suite_rows.append({
+            "name": s.get("name"),
+            "tests": t,
+            "failures": f,
+            "errors": e,
+            "skipped": k,
+            "time": s.get("time"),
+        })
+        for tc in s.iter("testcase"):
+            status = "passed"
+            detail = None
+            if tc.find("failure") is not None:
+                status = "failure"
+                detail = (tc.find("failure").get("message") or "")[:300]
+            elif tc.find("error") is not None:
+                status = "error"
+                detail = (tc.find("error").get("message") or "")[:300]
+            elif tc.find("skipped") is not None:
+                status = "skipped"
+            cases.append({
+                "classname": tc.get("classname"),
+                "name": tc.get("name"),
+                "time": tc.get("time"),
+                "status": status,
+                "detail": detail,
+            })
+    failed = failures + errors
+    passed = total - failed - skipped
+    rate = (passed / total * 100.0) if total else None
+    return {
+        "source": "diagnostics/test_results.xml",
+        "executed": True,
+        "discovered": discovered,
         "total": total,
         "passed": passed,
+        "failures": failures,
+        "errors": errors,
         "failed": failed,
         "skipped": skipped,
-        "pass_rate": (passed / total * 100) if total else 0.0,
+        "rate": rate,
+        "suites": suite_rows,
+        "cases": cases,
     }
 
 
-# =============================================================================
-# COHERENCE HISTORY
-# =============================================================================
-
-def load_history() -> list[dict]:
-    history_path = DIAGNOSTICS_DIR / "coherence_history.json"
-    if not history_path.exists():
+def read_coherence_history() -> list[dict[str, Any]]:
+    path = DIAGNOSTICS_DIR / "coherence_history.json"
+    if not path.exists():
+        finding("INFO", "history", "diagnostics/coherence_history.json", "ausente")
         return []
     try:
-        return json.loads(history_path.read_text(encoding="utf-8"))
-    except Exception:
-        return []
-
-
-def save_history_entry(test_results: dict[str, int | float], c_structural: float) -> None:
-    history_path = DIAGNOSTICS_DIR / "coherence_history.json"
-    history = load_history()
-    entry = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "passed": int(test_results["passed"]),
-        "failed": int(test_results["failed"]),
-        "total": int(test_results["total"]),
-        "pass_rate": float(test_results["pass_rate"]),
-        "c_structural": float(c_structural),
-    }
-    history.append(entry)
-    history = history[-50:]
-    try:
-        history_path.write_text(json.dumps(history, indent=2), encoding="utf-8")
-    except Exception:
-        pass
-
-
-def coherence_trend(history: list[dict]) -> str:
-    if len(history) < 2:
-        return "SIN DATOS"
-    last = history[-1]["passed"]
-    prev = history[-2]["passed"]
-    if last > prev:
-        return f"↑ CRECIENDO (+{last - prev})"
-    if last < prev:
-        return f"↓ REGRESIÓN ({last - prev})"
-    return "→ ESTABLE"
-
-
-def detect_loop(history: list[dict], window: int = 5) -> bool:
-    if len(history) < window:
-        return False
-    recent = [h["passed"] for h in history[-window:]]
-    variance = max(recent) - min(recent)
-    return variance == 0
-
-
-def trajectory_str(history: list[dict], n: int = 10) -> str:
-    recent = history[-n:] if len(history) >= n else history
-    return " → ".join(str(h["passed"]) for h in recent)
-
-
-# =============================================================================
-# DIAGNOSTIC SYSTEM — STRUCTURAL STATES
-#
-# Dominio físico:
-#     β = 1/27  = 0.037037037037
-#     α = 26/27 = 0.962962962963
-#
-# Umbral crítico del framework:
-#     C* = 0.450000000000
-# =============================================================================
-
-DIAGNOSTIC_STATES = [
-
-    # 95% – 100% del dominio estructural
-    (0.916666666667, 0.962962962963,
-     "1144", "Arquitecto Integrado",
-     "Alineación estructural máxima. El sistema opera cerca del límite físico α."),
-
-    # 80% – 95%
-    (0.777777777778, 0.916666666667,
-     "1133", "Integración Superior",
-     "Alta coherencia estructural con gran capacidad de adaptación."),
-
-    # 65% – 80%
-    (0.638888888889, 0.777777777778,
-     "1044", "Integración Avanzada",
-     "Sistema altamente coherente y funcional."),
-
-    # 50% – 65%
-    (0.500000000000, 0.638888888889,
-     "0144", "Integración Funcional",
-     "Coherencia suficiente para operar con estabilidad."),
-
-    # Umbral crítico definido por el framework
-    (0.450000000000, 0.500000000000,
-     "1122", "Umbral Crítico",
-     "Límite mínimo de autosostenibilidad estructural."),
-
-    # Entre β y el umbral crítico
-    (0.370000000000, 0.450000000000,
-     "1111", "Zona de Peligro",
-     "La estructura pierde estabilidad y depende de soporte externo."),
-
-    # Colapso
-    (0.037037037037, 0.370000000000,
-     "0000", "Colapso Estructural",
-     "La coherencia se aproxima al mínimo estructural β."),
-]
-
-
-def diagnostic_label(c_structural: float) -> tuple[str, str, str]:
-    for low, high, code, name, desc in DIAGNOSTIC_STATES:
-        if low <= c_structural < high:
-            return code, name, desc
-    return "0000", "Colapso Estructural", DIAGNOSTIC_STATES[-1][4]
-
-
-def diagnostic_vector_interpretation(code: str) -> str:
-    if len(code) != 4:
-        return ""
-    d1, d2, d3, d4 = code
-    origin = (
-        "✅ Self+Soul conectados" if d1 == "1" and d4 == "1" else
-        "⚠️ Soul activa, Self ausente" if d1 == "0" and d3 == "1" else
-        "⚠️ Self activo, Soul silenciada" if d1 == "1" and d2 == "0" else
-        "❌ Desconexión origen"
-    )
-    manifest = f"Robustez Mind+Body: {d3}{d4}/44"
-    return f"{origin} | {manifest}"
-
-
-# ============================================================
-# STRUCTURAL NORMALIZATION
-# ============================================================
-
-def structural_percent(c_structural: float) -> float:
-    """
-    Convierte CΩ al porcentaje del dominio físico [β, α].
-
-    β  ->   0 %
-    α  -> 100 %
-    """
-    c = max(BETA, min(ALPHA, float(c_structural)))
-    return (c - BETA) / (ALPHA - BETA)
-
-
-# ============================================================
-# PHENOMENOLOGICAL STATE
-# ============================================================
-
-def phenomenological_state(c_structural: float) -> tuple[str, str]:
-    p = structural_percent(c_structural)
-
-    if p >= 0.95:
-        return "ARQUITECTO INTEGRADO", "⟨◉⟩"
-
-    if p >= 0.80:
-        return "INTEGRACIÓN SUPERIOR", "⟨◉⟩"
-
-    if p >= 0.65:
-        return "INTEGRACIÓN AVANZADA", "⟨◐⟩"
-
-    if p >= 0.50:
-        return "INTEGRACIÓN FUNCIONAL", "⟨◑⟩"
-
-    if p >= 0.45:
-        return "UMBRAL CRÍTICO", "⟨◑⟩"
-
-    if p >= 0.37:
-        return "ZONA DE PELIGRO", "⟨◯⟩"
-
-    return "COLAPSO ESTRUCTURAL", "⟨○⟩"
-
-
-# =============================================================================
-# MODULE STATUS
-# =============================================================================
-
-def check_module_status() -> list[tuple[str, str]]:
-    modules = [
-        ("formulas.constants", "constants.py"),
-        ("formulas.coherence", "coherence.py"),
-        ("formulas.energy", "energy.py"),
-        ("formulas.cosmology", "cosmology.py   ← NEW v3.2"),
-        ("formulas.tension", "tension.py     ← NEW v3.2"),
-        ("formulas.dynamics", "dynamics.py    ← NEW v3.2"),
-        ("formulas.metaconsciousness", "metaconsciousness.py"),
-        ("formulas.torus_formula", "torus_formula.py ← Ley del Toroide"),
-        ("layers.l7_integration", "l7_integration.py ← L7 Integración Total"),
-    ]
-    results = []
-    for module_path, label in modules:
-        mod = safe_import(module_path)
-        status = "✅ activo" if mod is not None else "❌ no encontrado"
-        results.append((label, status))
-    return results
-
-
-# =============================================================================
-# SYSTEM METRICS
-# =============================================================================
-
-def compute_zeta(states: dict[str, dict[str, float]] | None = None) -> float:
-    source = states if states is not None else default_layer_states()
-    phi_total = sum(source[k]["phi"] for k in ["L0", "L1", "L2", "L3", "L4", "L5", "L6"])
-    return phi_total / (2 * math.pi)
-
-
-def compute_omega_d(states: dict[str, dict[str, float]] | None = None) -> float:
-    source = states if states is not None else default_layer_states()
-    phi_total = sum(source[k]["phi"] for k in ["L0", "L1", "L2", "L3", "L4", "L5", "L6"])
-    return math.sqrt(max(math.pi**2 - phi_total**2 / 4, 0.0))
-
-
-def compute_period(omega_d: float) -> float:
-    return (2 * math.pi / omega_d) if omega_d > 0 else float("inf")
-
-
-def compute_system_entropy(states: dict[str, dict[str, float]]) -> tuple[float, float, dict[str, float]]:
-    energies = compute_energy_distribution(states)
-    entropy, total_energy = compute_entropy_from_energies(energies)
-    return entropy, total_energy, energies
-
-
-def compute_system_harmony(entropy_value: float) -> float:
-    return compute_harmony_from_entropy(entropy_value)
-
-
-# =============================================================================
-# L7 INTEGRATION STATUS
-# =============================================================================
-
-def l7_integration_status(states: dict[str, dict[str, float]] | None = None) -> dict:
-    """
-    Calcula L7 = producto multiplicativo de L0-L6.
-    Prioridad:
-      1. layers.l7_integration
-      2. cálculo estructural directo desde estados detectados
-    """
-    source_states = states if states is not None else default_layer_states()
-
-    mod = safe_import("layers.l7_integration")
-    if mod is not None:
-        try:
-            LayerIntegration = getattr(mod, "LayerIntegration")
-            layer = LayerIntegration()
-
-            layers_data = [
-                {"L": source_states["L0"]["L"], "phi": source_states["L0"]["phi"]},
-                {"L": source_states["L1"]["L"], "phi": source_states["L1"]["phi"]},
-                {"L": source_states["L2"]["L"], "phi": source_states["L2"]["phi"]},
-                {"L": source_states["L3"]["L"], "phi": source_states["L3"]["phi"]},
-                {"L": source_states["L4"]["L"], "phi": source_states["L4"]["phi"]},
-                {"L": source_states["L5"]["L"], "phi": source_states["L5"]["phi"]},
-                {"L": source_states["L6"]["L"], "phi": source_states["L6"]["phi"]},
-            ]
-
-            value = layer.compute(layers_data)
-            integrated = layer.is_integrated()
-
-            return {
-                "available": True,
-                "value": value,
-                "status": "INTEGRATED" if integrated else "COLLAPSED",
-                "formula": "L7 = ∏ Li * (1 - phi_i)  para i = 0..6",
-                "law": "Ley 8: Integración Total — Todo lo que no se integra colapsa",
-                "note": "L6 orienta. L7 verifica.",
-                "max_possible": ALPHA,
-                "source": "layers.l7_integration",
-            }
-        except Exception:
-            pass
-
-    fallback_value = compute_measured_l7_from_states(source_states)
-    return {
-        "available": True,
-        "value": fallback_value,
-        "status": "INTEGRATED" if fallback_value > 0 else "COLLAPSED",
-        "formula": "L7 = ∏ Li * (1 - phi_i)  para i = 0..6",
-        "law": "Ley 8: Integración Total — Todo lo que no se integra colapsa",
-        "note": "L6 orienta. L7 verifica.",
-        "max_possible": ALPHA,
-        "source": "structural-fallback",
-    }
-
-
-# =============================================================================
-# TORUS FORMULA VALIDATION
-# =============================================================================
-
-def torus_formula_validation() -> dict:
-    """
-    Valida la Fórmula del Toroide desde formulas/torus_formula.py.
-    Verifica las 4 leyes estructurales, E(M) y conexión UCF.
-    """
-    mod = safe_import("formulas.torus_formula")
-    if mod is None:
-        return {
-            "available": False,
-            "status": "MODULO NO ENCONTRADO",
-        }
-
-    try:
-        primes = [2, 3, 5, 7]
-
-        law1 = getattr(mod, "law1_cycle_independence")(primes)
-        law2 = getattr(mod, "law2_cycle_resonance")([4, 6])
-        law3 = getattr(mod, "law3_prime_filtering")(7)
-        law4 = getattr(mod, "law4_field_energy")(primes, prime_limit=5000)
-        beta_analysis = getattr(mod, "beta_torus_residue_analysis")()
-
-        all_laws = (
-            law1["law_holds"]
-            and law2["law_holds"]
-            and law3["law_holds"]
-            and law4["law_holds"]
-        )
-
-        return {
-            "available": True,
-            "primes": primes,
-            "M": law1["M"],
-            "phi_M": getattr(mod, "phi_M")(primes),
-            "law1_holds": law1["law_holds"],
-            "law2_holds": law2["law_holds"],
-            "law3_holds": law3["law_holds"],
-            "law4_holds": law4["law_holds"],
-            "all_laws": all_laws,
-            "E_M_computed": law4.get("E_M", "N/A"),
-            "E_M6_paper": E_M6_PAPER,
-            "E_M7_paper": E_M7_PAPER,
-            "beta_closest_n": beta_analysis["closest_n"],
-            "beta_closest_v": beta_analysis["closest_value"],
-            "beta_status": beta_analysis["status"],
-            "rh_status": "completo",
-            "ucf_link": "beta = residuo del cubo | E(M) = residuo del toroide",
-            "status": "PASS" if all_laws else "REVIEW",
-        }
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, list) else []
     except Exception as e:
-        return {
-            "available": False,
-            "status": f"ERROR: {e}",
-        }
+        finding("ERROR", "history", "diagnostics/coherence_history.json", str(e))
+        return []
 
 
-# =============================================================================
-# DOMAIN VALIDATIONS
-# =============================================================================
-
-def cosmological_constant_validation() -> dict:
-    """
-    Validación cosmológica extendida del framework.
-
-    Incluye:
-      1. Constante cosmológica Λ
-      2. Tensión de Hubble Ω_H
-    """
-
-    cosmology_mod = safe_import("formulas.cosmology")
-    constants_mod = safe_import("formulas.constants")
-
-    # =========================================================================
-    # Λ — CONSTANTE COSMOLÓGICA
-    # =========================================================================
-
-    lambda_base_term = 27 * math.pi
-    lambda_correction_term = BETA * (PHI ** 2)
-    lambda_exponent = lambda_base_term + lambda_correction_term
-    lambda_prediction = BETA ** lambda_exponent
-
-    lambda_observed = None
-    lambda_observed_candidates = [
-        "LAMBDA_OBSERVED",
-        "OBSERVED_LAMBDA",
-        "LAMBDA_COSMO_OBSERVED",
-        "LAMBDA_VALUE_OBSERVED",
+def discover_artifacts() -> dict[str, Any]:
+    names = [
+        "test_results.xml",
+        "coherence_history.json",
+        "axioms_report.json",
+        "generatividad_report.json",
+        "contratos_report.json",
+        "evaluaciones.json",
+        "OMEGA_REPORT.md",
+        "omega_report_data.json",
     ]
-
-    for mod in (cosmology_mod, constants_mod):
-        if mod is None:
-            continue
-        for name in lambda_observed_candidates:
-            value = get_attr(mod, name, None)
-            if value is not None:
-                try:
-                    lambda_observed = float(value)
-                    if lambda_observed > 0:
-                        break
-                except Exception:
-                    pass
-        if lambda_observed is not None:
-            break
-
-    if lambda_observed is None:
-        lambda_observed = 2.8880e-122
-
-    lambda_error_pct = abs(lambda_prediction - lambda_observed) / lambda_observed * 100
-    lambda_log10_prediction = math.log10(lambda_prediction) if lambda_prediction > 0 else float("-inf")
-    lambda_log10_observed = math.log10(lambda_observed) if lambda_observed > 0 else float("-inf")
-    lambda_log10_error = abs(lambda_log10_prediction - lambda_log10_observed)
-
-    if lambda_error_pct < 5:
-        lambda_status = "PASS"
-    elif lambda_error_pct < 20:
-        lambda_status = "REVIEW"
-    else:
-        lambda_status = "FAIL"
-
-    # =========================================================================
-    # H0 / TENSIÓN DE HUBBLE
-    # =========================================================================
-
-    hubble_formula_label = "Omega_H = BETA * PHI * sqrt(2)"
-    hubble_prediction = BETA * PHI * math.sqrt(2)
-
-    h_early = None
-    h_late = None
-    obs_diff = None
-
-    h_early_candidates = ["H_EARLY", "H0_EARLY", "HUBBLE_EARLY"]
-    h_late_candidates = ["H_LATE", "H0_LATE", "HUBBLE_LATE"]
-    obs_diff_candidates = ["OBS_DIFF", "HUBBLE_OBS_DIFF", "OBSERVED_HUBBLE_TENSION"]
-
-    for mod in (cosmology_mod, constants_mod):
-        if mod is None:
-            continue
-
-        for name in h_early_candidates:
-            value = get_attr(mod, name, None)
-            if value is not None:
-                try:
-                    h_early = float(value)
-                    break
-                except Exception:
-                    pass
-
-        for name in h_late_candidates:
-            value = get_attr(mod, name, None)
-            if value is not None:
-                try:
-                    h_late = float(value)
-                    break
-                except Exception:
-                    pass
-
-        for name in obs_diff_candidates:
-            value = get_attr(mod, name, None)
-            if value is not None:
-                try:
-                    obs_diff = float(value)
-                    break
-                except Exception:
-                    pass
-
-    if h_early is None:
-        h_early = 67.4
-    if h_late is None:
-        h_late = 73.0
-    if obs_diff is None:
-        obs_diff = (h_late - h_early) / h_early
-
-    hubble_abs_error = abs(hubble_prediction - obs_diff)
-    hubble_error_pct = (hubble_abs_error / obs_diff * 100) if obs_diff != 0 else float("inf")
-    hubble_tolerance = 0.01
-
-    if hubble_abs_error < hubble_tolerance:
-        hubble_status = "PASS"
-    elif hubble_abs_error < 2 * hubble_tolerance:
-        hubble_status = "REVIEW"
-    else:
-        hubble_status = "FAIL"
-
-    # =========================================================================
-    # STATUS GLOBAL COSMOLÓGICO
-    # =========================================================================
-
-    if lambda_status == "PASS" and hubble_status == "PASS":
-        overall_status = "PASS"
-    elif lambda_status == "FAIL" or hubble_status == "FAIL":
-        overall_status = "FAIL"
-    else:
-        overall_status = "REVIEW"
-
-    return {
-        "status": overall_status,
-        "lambda": {
-            "formula": "Lambda = BETA^(27π + BETA·PHI^2)",
-            "prediction": lambda_prediction,
-            "observed": lambda_observed,
-            "error_pct": lambda_error_pct,
-            "log10_prediction": lambda_log10_prediction,
-            "log10_observed": lambda_log10_observed,
-            "log10_error": lambda_log10_error,
-            "exponent_total": lambda_exponent,
-            "base_term_27pi": lambda_base_term,
-            "correction_term_beta_phi2": lambda_correction_term,
-            "correction_ratio": (
-                lambda_correction_term / lambda_exponent if lambda_exponent != 0 else 0.0
-            ),
-            "numerically_stable": math.isfinite(lambda_prediction) and lambda_prediction > 0,
-            "improvement_qm": "10^120",
-            "status": lambda_status,
-        },
-        "hubble": {
-            "formula": hubble_formula_label,
-            "prediction": hubble_prediction,
-            "observed_diff": obs_diff,
-            "H_early": h_early,
-            "H_late": h_late,
-            "abs_error": hubble_abs_error,
-            "error_pct": hubble_error_pct,
-            "tolerance": hubble_tolerance,
-            "status": hubble_status,
-        },
-    }
-
-
-def economic_cycles_validation() -> dict:
-    natural_zeta = 0.118322
-    observed = 0.11
-    damping_error = abs(natural_zeta - observed) / observed * 100
-    predicted_k = 54.8
-    observed_k = 54.0
-    kond_error = abs(predicted_k - observed_k) / observed_k * 100
-    return {
-        "natural_zeta": natural_zeta,
-        "observed_zeta": observed,
-        "damping_error_pct": damping_error,
-        "kond_pred": predicted_k,
-        "kond_obs": observed_k,
-        "kond_error_pct": kond_error,
-        "status": "PASS" if damping_error < 10 and kond_error < 5 else "REVIEW",
-    }
+    items = []
+    for name in names:
+        p = DIAGNOSTICS_DIR / name
+        items.append({
+            "name": name,
+            "present": p.exists(),
+            "bytes": p.stat().st_size if p.exists() else None,
+        })
+    return {"items": items, "present": sum(1 for i in items if i["present"]), "missing": sum(1 for i in items if not i["present"])}
 
 
 # =============================================================================
-# MARKDOWN HELPERS
+# LAYERS / METRICS — sin fingir medición
+# =============================================================================
+
+def discover_layers() -> list[dict[str, Any]]:
+    layers_dir = REPO_ROOT / "layers"
+    found: list[dict[str, Any]] = []
+    if not layers_dir.exists():
+        finding("INFO", "layers", "layers/", "directorio ausente")
+        return found
+    for path in sorted(layers_dir.rglob("*.py")):
+        if path.name == "__init__.py":
+            continue
+        rel = str(path.relative_to(REPO_ROOT))
+        name = module_name_from_path(rel)
+        entry = {
+            "id": path.stem,
+            "path": rel,
+            "module": name,
+            "contract": None,
+            "activation_raw": None,
+            "friction_raw": None,
+            "source": rel,
+            "source_type": "repository",
+            "measured": False,
+        }
+        if not name:
+            found.append(entry)
+            continue
+        imported = try_import(name)
+        if not imported["success"]:
+            entry["import_error"] = imported["error_message"]
+            found.append(entry)
+            continue
+        mod = imported["module"]
+        contract = None
+        for attr in ("__omega__", "OMEGA_LAYER", "LAYER_ID"):
+            if hasattr(mod, attr):
+                contract = attr
+                entry["contract"] = attr
+                meta = getattr(mod, attr)
+                if isinstance(meta, dict):
+                    entry.update({k: _safe(v, k) for k, v in meta.items()})
+                else:
+                    entry["contract_value"] = _safe(meta)
+        for inst_name in dir(mod):
+            obj = getattr(mod, inst_name, None)
+            if isinstance(obj, type):
+                if hasattr(obj, "describe") or hasattr(obj, "report") or hasattr(obj, "__omega__"):
+                    entry["type"] = obj.__name__
+                    contract = contract or obj.__name__
+        entry["measured"] = contract is not None
+        if contract is None:
+            finding(
+                "WARNING",
+                "layers",
+                name,
+                "módulo de layers/ sin contrato explícito (__omega__/describe/report)",
+            )
+        found.append(entry)
+    return found
+
+
+def collect_declared_constants() -> list[dict[str, Any]]:
+    imported = try_import("formulas.constants")
+    if not imported["success"]:
+        finding("ERROR", "constants", "formulas.constants", imported["error_message"] or "no importable")
+        return []
+    mod = imported["module"]
+    rows = []
+    for name in dir(mod):
+        if name.startswith("_"):
+            continue
+        try:
+            val = getattr(mod, name)
+        except Exception as e:
+            finding("WARNING", "constants", name, str(e))
+            continue
+        if callable(val):
+            continue
+        rows.append({
+            "name": name,
+            "value": "[REDACTED]" if _is_secret_name(name) else _safe(val, name),
+            "type": type(val).__name__,
+            "source": "formulas.constants.{0}".format(name),
+            "source_type": "repository",
+            "class": "DECLARED",
+            "measured": True,
+            "fallback": False,
+            "redacted": _is_secret_name(name),
+        })
+    return rows
+
+
+def collect_domain_validations() -> list[dict[str, Any]]:
+    """
+    Productores dinámicos: cualquier módulo formulas.* o layers.*
+    que exponga omega_validation() / __omega_report__().
+    El renderer no conoce cosmología ni toroide.
+    """
+    reports: list[dict[str, Any]] = []
+    roots = []
+    for folder in ("formulas", "layers"):
+        d = REPO_ROOT / folder
+        if d.exists():
+            roots.append(d)
+    seen = set()
+    for root in roots:
+        for path in sorted(root.rglob("*.py")):
+            if path.name == "__init__.py":
+                continue
+            rel = str(path.relative_to(REPO_ROOT))
+            name = module_name_from_path(rel)
+            if not name or name in seen:
+                continue
+            seen.add(name)
+            imported = try_import(name)
+            if not imported["success"]:
+                continue
+            mod = imported["module"]
+            producer = None
+            for attr in ("omega_validation", "__omega_report__", "omega_report"):
+                if hasattr(mod, attr) and callable(getattr(mod, attr)):
+                    producer = getattr(mod, attr)
+                    break
+            if producer is None:
+                continue
+            try:
+                payload = producer()
+            except Exception as e:
+                finding("ERROR", "validation", name, "{0}: {1}".format(type(e).__name__, e))
+                reports.append({
+                    "id": name,
+                    "title": name,
+                    "status": "ERROR",
+                    "source": name,
+                    "findings": [{"message": str(e)}],
+                })
+                continue
+            if isinstance(payload, dict):
+                payload.setdefault("id", name)
+                payload.setdefault("title", name)
+                payload.setdefault("source", name)
+                reports.append(payload)
+            else:
+                reports.append({
+                    "id": name,
+                    "title": name,
+                    "status": "INFO",
+                    "source": name,
+                    "metrics": {"value": _safe(payload)},
+                })
+    return reports
+
+
+# =============================================================================
+# PACKAGE
+# =============================================================================
+
+def build_paquete() -> dict[str, Any]:
+    FINDINGS.clear()
+    engine_pkg, engine_state = try_engine_package()
+    inventory = build_repository_inventory()
+    modules = build_module_census(inventory)
+    symbols = []
+    for m in modules:
+        symbols.extend(m.get("symbols") or [])
+    variables = [s for s in symbols if s.get("category") == "variable"]
+    layers = discover_layers()
+    tests = read_test_results()
+    history = read_coherence_history()
+    artifacts = discover_artifacts()
+    constants = collect_declared_constants()
+    validations = collect_domain_validations()
+    deps = build_dependency_graph(modules)
+
+    var_stats = {
+        "total_public_symbols": len(symbols),
+        "variables": len(variables),
+        "functions": sum(1 for s in symbols if s.get("category") == "function"),
+        "classes": sum(1 for s in symbols if s.get("category") == "class"),
+        "redacted": sum(1 for s in symbols if s.get("redacted")),
+        "numeric": sum(1 for s in variables if isinstance(s.get("value"), (int, float))),
+        "boolean": sum(1 for s in variables if isinstance(s.get("value"), bool)),
+        "string": sum(1 for s in variables if isinstance(s.get("value"), str) and not s.get("redacted")),
+    }
+
+    coverage = {
+        "python_files_discovered": inventory["summary"].get("python", 0),
+        "python_files_parsed": sum(1 for p in inventory.get("python") or [] if p.get("parse_ok")),
+        "modules_importable": sum(1 for m in modules if m.get("importable")),
+        "modules_failed_import": sum(1 for m in modules if not m.get("importable")),
+        "public_symbols_discovered": len(symbols),
+        "public_symbols_rendered": len(symbols),
+        "diagnostic_artifacts_read": artifacts["present"],
+        "diagnostic_artifacts_missing": artifacts["missing"],
+        "layers_discovered": len(layers),
+        "validations_discovered": len(validations),
+        "engine_paquete": engine_state.get("paquete_from_engine", False),
+    }
+
+    generated = {
+        "utc": datetime.now(timezone.utc).isoformat(),
+        "omega_version": OMEGA_VERSION,
+        "schema_version": SCHEMA_VERSION,
+        "sha": (os.environ.get("GITHUB_SHA") or "local")[:12],
+        "ref": os.environ.get("GITHUB_REF") or "",
+        "run_id": os.environ.get("GITHUB_RUN_ID") or "",
+        "python": sys.version.split()[0],
+        "platform": platform.platform(),
+        "repository": str(REPO_ROOT.name),
+    }
+
+    local = {
+        "schema_version": SCHEMA_VERSION,
+        "generated": generated,
+        "engine": engine_state,
+        "repository": inventory,
+        "modules": modules,
+        "symbols": {"items": symbols, "stats": var_stats},
+        "variables": {"items": variables, "stats": var_stats},
+        "constants": constants,
+        "layers": layers,
+        "tests": tests,
+        "coherence_history": history,
+        "validations": validations,
+        "dependencies": deps,
+        "artifacts": artifacts,
+        "coverage": coverage,
+        "findings": list(FINDINGS),
+    }
+
+    if engine_pkg:
+        merged = dict(engine_pkg)
+        merged.setdefault("schema_version", SCHEMA_VERSION)
+        merged.setdefault("generated", generated)
+        for key, val in local.items():
+            if key not in merged:
+                merged[key] = val
+        merged["omega_discovery"] = {
+            "used": True,
+            "note": "campos locales añadidos solo si Engine no los entregó",
+        }
+        merged["findings"] = list(FINDINGS) + list(merged.get("findings") or [])
+        return merged
+    local["authority"] = "omega-discovery"
+    local["omega_discovery"] = {
+        "used": True,
+        "note": "Engine.paquete_omega() no disponible; paquete construido por descubrimiento local",
+    }
+    return local
+
+
+# =============================================================================
+# RENDER — formas, no semánticas
 # =============================================================================
 
 def md_table(headers: list[str], rows: list[list[str]]) -> str:
     line1 = "| " + " | ".join(headers) + " |"
     line2 = "| " + " | ".join(["---"] * len(headers)) + " |"
-    body = ["| " + " | ".join(row) + " |" for row in rows]
+    body = ["| " + " | ".join(str(c) for c in row) + " |" for row in rows]
     return "\n".join([line1, line2] + body)
 
 
-def layer_rows(states: dict[str, dict[str, float]] | None = None) -> list[list[str]]:
-    source = states if states is not None else default_layer_states()
-    rows: list[list[str]] = []
-
-    for idx, key in enumerate(["L0", "L1", "L2", "L3", "L4", "L5", "L6"]):
-        angle = (idx * GOLDEN_ANG) % 360
-        lo, hi = LAYER_HEALTHY_RANGES[key]
-        rows.append([
-            key,
-            LAYER_NAMES[key],
-            f"{safe_float(source[key]['phi'], LAYER_FRICTIONS[key]):.2f}",
-            f"{angle:.1f} deg",
-            f"[{lo:.2f}, {hi:.2f}]",
-        ])
-
-    angle_l7 = (7 * GOLDEN_ANG) % 360
-    lo7, hi7 = LAYER_HEALTHY_RANGES["L7"]
-    rows.append([
-        "L7",
-        f"{LAYER_NAMES['L7']} ← emergente",
-        f"{LAYER_FRICTIONS['L7']:.2f}",
-        f"{angle_l7:.1f} deg",
-        f"[{lo7:.2f}, {hi7:.4f}]",
-    ])
-
-    friction_l0_l6 = sum(safe_float(source[k]["phi"], LAYER_FRICTIONS[k]) for k in ["L0", "L1", "L2", "L3", "L4", "L5", "L6"])
-    rows.append(["**Total**", "", f"**{friction_l0_l6:.2f}** (L0-L6)", "", ""])
-    return rows
+def _icon_status(status: Any) -> str:
+    s = str(status or "").upper()
+    if s in {"PASS", "OK", "TRUE", "COHERENTE", "INTEGRATED", "OPERATIVO", "STABLE", "IMPROVEMENT"}:
+        return ICON_OK
+    if s in {"FAIL", "ERROR", "FALSE", "INCOHERENTE", "COLLAPSED", "REGRESSION"}:
+        return ICON_FAIL
+    if s in {"WARN", "WARNING", "REVIEW", "UNAVAILABLE"}:
+        return ICON_WARN
+    return ICON_ITEM
 
 
-# =============================================================================
-# REPORT BUILD
-# =============================================================================
+def _fmt(value: Any) -> str:
+    if value is None:
+        return "N/D"
+    if isinstance(value, bool):
+        return "True" if value else "False"
+    if isinstance(value, float):
+        if abs(value) >= 1e6 or (abs(value) < 1e-4 and value != 0):
+            return "{0:.4e}".format(value)
+        return "{0:.6f}".format(value)
+    return str(value)
 
 
-# =============================================================================
-# ADDITIONAL DOMAIN VALIDATIONS
-# =============================================================================
-
-def quantum_gravity_validation() -> dict:
-    constants_mod = safe_import("formulas.constants")
-    if constants_mod is None:
-        return {"available": False, "status": "MODULO NO ENCONTRADO"}
-        
-    e_planck_ucf = get_attr(constants_mod, "E_PLANCK_UCF", 1.956e9)
-    e_planck_ref = get_attr(constants_mod, "E_PLANCK_REF", 1.956e9)
-    e_planck_error = get_attr(constants_mod, "E_PLANCK_ERROR", 0.0)
-    
-    m_electron_ucf = get_attr(constants_mod, "M_ELECTRON_UCF", 9.109e-31)
-    m_electron_ref = get_attr(constants_mod, "M_ELECTRON_REF", 9.10938e-31)
-    m_electron_error = get_attr(constants_mod, "M_ELECTRON_ERROR", 0.0)
-    
-    r_electron_ucf = get_attr(constants_mod, "R_ELECTRON_UCF", 2.817e-15)
-    r_electron_ref = get_attr(constants_mod, "R_ELECTRON_REF", 2.81794e-15)
-    r_electron_error = get_attr(constants_mod, "R_ELECTRON_ERROR", 0.0)
-    
-    alpha_s_ucf = get_attr(constants_mod, "ALPHA_S_UCF", 0.1179)
-    alpha_s_ref = get_attr(constants_mod, "ALPHA_S_REF", 0.1179)
-    alpha_s_error = get_attr(constants_mod, "ALPHA_S_ERROR", 0.0)
-    
-    return {
-        "available": True,
-        "e_planck_ucf": e_planck_ucf,
-        "e_planck_ref": e_planck_ref,
-        "e_planck_error": e_planck_error * 100,
-        "m_electron_ucf": m_electron_ucf,
-        "m_electron_ref": m_electron_ref,
-        "m_electron_error": m_electron_error * 100,
-        "r_electron_ucf": r_electron_ucf,
-        "r_electron_ref": r_electron_ref,
-        "r_electron_error": r_electron_error * 100,
-        "alpha_s_ucf": alpha_s_ucf,
-        "alpha_s_ref": alpha_s_ref,
-        "alpha_s_error": alpha_s_error * 100,
-        "status": "PASS" if e_planck_error < 0.05 else "REVIEW"
-    }
-
-def neuroscience_validation() -> dict:
-    phi_ratio = PHI
-    observed_ratio = 1.667
-    error = abs(phi_ratio - observed_ratio) / observed_ratio * 100
-    
-    return {
-        "available": True,
-        "phi_ratio": phi_ratio,
-        "observed_ratio": observed_ratio,
-        "error": error,
-        "status": "PASS" if error < 5.0 else "REVIEW"
-    }
-
-def genetic_code_validation() -> dict:
-    amino_acids = 27 - 7
-    observed = 20
-    
-    body_temp = 1000 * BETA
-    observed_temp = 37.0
-    temp_error = abs(body_temp - observed_temp) / observed_temp * 100
-    
-    return {
-        "available": True,
-        "amino_acids": amino_acids,
-        "observed_amino": observed,
-        "body_temp": body_temp,
-        "observed_temp": observed_temp,
-        "temp_error": temp_error,
-        "status": "PASS" if amino_acids == observed and temp_error < 1.0 else "REVIEW"
-    }
-
-def black_hole_validation() -> dict:
-    hawking_ref = 1 / (8 * math.pi)
-    error = abs(BETA - hawking_ref) / hawking_ref * 100
-    
-    return {
-        "available": True,
-        "beta_value": BETA,
-        "hawking_ref": hawking_ref,
-        "error": error,
-        "status": "PASS" if error < 10.0 else "REVIEW"
-    }
-
-def build_report() -> str:
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-    test_results = estimate_test_results()
-
-    states, states_source = discover_layer_states()
-
-    zeta = compute_zeta(states)
-    omega_d = compute_omega_d(states)
-    period = compute_period(omega_d)
-
-    entropy, total_energy, energies = compute_system_entropy(states)
-    harmony = compute_system_harmony(entropy)
-
-    l7_info = l7_integration_status(states)
-
-    c_structural, coherence_source = compute_system_coherence_measured(
-        states=states,
-        harmony=harmony,
-        l7_value=safe_float(l7_info.get("value", 0.0), 0.0),
-    )
-
-    save_history_entry(test_results, c_structural)
-    history = load_history()
-
-    c_global_norm = c_structural / ALPHA if ALPHA > 0 else 0.0
-    pass_rate = test_results["pass_rate"]
-    c_ci = pass_rate / 100.0
-    phi_eff = (1.0 - c_structural) * 2 * math.pi
-
-    code, diag_name, diag_desc = diagnostic_label(c_structural)
-    vector_interp = diagnostic_vector_interpretation(code)
-
-    pheno_name, pheno_symbol = phenomenological_state(c_structural)
-    trend = coherence_trend(history)
-    loop_detected = detect_loop(history)
-    traj = trajectory_str(history)
-    sha = os.getenv("GITHUB_SHA", "local")[:7]
-    module_status = check_module_status()
-
-    above_critical = c_structural >= C_THRESHOLD_CRITICAL
-    above_survival = c_structural >= C_THRESHOLD_SURVIVAL
+def render_unknown(key: str, value: Any, lines: list[str], depth: int = 0) -> None:
+    indent = "  " * depth
+    if value is None or isinstance(value, (bool, int, float, str)):
+        lines.append("{0}- {1} {2}: `{3}`".format(indent, ICON_ITEM, key, _fmt(value)))
+        return
+    if isinstance(value, list):
+        if not value:
+            lines.append("{0}- {1} {2}: `[]`".format(indent, ICON_ITEM, key))
+            return
+        if all(isinstance(x, dict) for x in value):
+            keys: list[str] = []
+            for x in value:
+                for k in x.keys():
+                    if k not in keys:
+                        keys.append(str(k))
+            show = keys[:6]
+            rows = []
+            for x in value[:40]:
+                rows.append([_fmt(x.get(k))[:48] for k in show])
+            lines.append("{0}- {1} {2} ({3})".format(indent, ICON_ITEM, key, len(value)))
+            lines.append(md_table(show, rows))
+            if len(value) > 40:
+                lines.append("{0}  {1} … {2} más".format(indent, ICON_INFO, len(value) - 40))
+            return
+        if all(not isinstance(x, (dict, list)) for x in value):
+            lines.append("{0}- {1} {2} ({3})".format(indent, ICON_ITEM, key, len(value)))
+            for i, x in enumerate(value[:80], 1):
+                lines.append("{0}  {1:>3}. {2}".format(indent, i, _fmt(x)))
+            return
+        lines.append("{0}- {1} {2} ({3})".format(indent, ICON_ITEM, key, len(value)))
+        for i, x in enumerate(value[:20], 1):
+            render_unknown("#{0}".format(i), x, lines, depth + 1)
+        return
+    if isinstance(value, dict):
+        lines.append("{0}- {1} **{2}**".format(indent, ICON_ITEM, key))
+        for k, v in list(value.items())[:40]:
+            render_unknown(str(k), v, lines, depth + 1)
+        return
+    lines.append("{0}- {1} {2}: `{3}`".format(indent, ICON_ITEM, key, _fmt(_safe(value))))
 
 
-    torus_info = torus_formula_validation()
-    qg_info = quantum_gravity_validation()
-    neuro_info = neuroscience_validation()
-    genetic_info = genetic_code_validation()
-    bh_info = black_hole_validation()
-
-
-    const_checks = [
-        ["ALPHA + BETA = 1", "PASS" if abs((ALPHA + BETA) - 1.0) < 1e-9 else "FAIL"],
-        ["R_FIN = 1 + BETA", "PASS" if abs(R_FIN - (1 + BETA)) < 1e-9 else "FAIL"],
-        ["sin^2(theta) = BETA", "PASS" if abs(math.sin(THETA_CUBE_RAD) ** 2 - BETA) < 1e-9 else "FAIL"],
-        ["PHI^2 = PHI + 1", "PASS" if abs(PHI ** 2 - (PHI + 1)) < 1e-9 else "FAIL"],
-        ["ZETA < 1 (underdamped)", "PASS" if zeta < 1 else "FAIL"],
-        ["PHI_TOTAL < 2pi (alive)", "PASS" if sum(states[k]["phi"] for k in ["L0", "L1", "L2", "L3", "L4", "L5", "L6"]) < 2 * math.pi else "FAIL"],
-        ["OMEGA_D > 0 (oscillates)", "PASS" if omega_d > 0 else "FAIL"],
-        ["KAPPA = pi/4", "PASS" if abs(KAPPA - math.pi / 4) < 1e-9 else "FAIL"],
-        ["S_REF = e/pi", "PASS" if abs(S_REF - math.e / math.pi) < 1e-9 else "FAIL"],
-        ["C_structural <= alpha", "PASS" if c_structural <= ALPHA + 1e-9 else "FAIL"],
-        ["C_structural < 1.0", "PASS" if c_structural < 1.0 else "FAIL"],
-        ["BETA > 0 (irreducible)", "PASS" if BETA > 0 else "FAIL"],
-        ["C > 0.72 (no crítico)", "PASS" if above_critical else "WARN"],
-        ["C > 0.10 (survival)", "PASS" if above_survival else "FAIL"],
-        ["L7 > 0 (integrado)", "PASS" if l7_info.get("value", 0) > 0 else "FAIL"],
-    ]
-
-    passed_checks = sum(1 for _, s in const_checks if s == "PASS")
-    cosmo_info = cosmological_constant_validation()
-    lambda_info = cosmo_info["lambda"]
-    hubble_info = cosmo_info["hubble"]
-    econ_info = economic_cycles_validation()
-
+def render_markdown(pkg: dict[str, Any]) -> str:
     lines: list[str] = []
+    gen = pkg.get("generated") or {}
+    eng = pkg.get("engine") or {}
+    cov = pkg.get("coverage") or {}
+    tests = pkg.get("tests") or {}
+    findings = pkg.get("findings") or []
+    layers = pkg.get("layers") or []
+    modules = pkg.get("modules") or []
+    constants = pkg.get("constants") or []
+    validations = pkg.get("validations") or []
+    history = pkg.get("coherence_history") or []
+    repo = pkg.get("repository") or {}
+    summary = repo.get("summary") or {}
+    artifacts = pkg.get("artifacts") or {}
+    deps = pkg.get("dependencies") or {}
+    symbols = (pkg.get("symbols") or {}).get("items") or []
+    stats = (pkg.get("symbols") or {}).get("stats") or {}
 
-    lines.append("# OMEGA DIAGNOSTIC REPORT")
-    lines.append(f"**Generated:** {now}")
-    lines.append("**Framework:** UCF v3.2 (Universal Coherence Framework)")
-    lines.append("**Author:** Ilver Villasmil")
-    lines.append(f"**Commit:** `{sha}`")
-    lines.append("")
-    lines.append("---")
-    lines.append("")
+    errors_n = sum(1 for f in findings if str(f.get("severity", "")).upper() == "ERROR")
+    warns_n = sum(1 for f in findings if str(f.get("severity", "")).upper() == "WARNING")
+    coherent = errors_n == 0 and bool(eng.get("available") or pkg.get("authority") == "omega-discovery")
 
-    # Estado Fenomenológico
-    lines.append("## Estado Fenomenológico")
-    lines.append("")
-    loop_warning = "  ⚠️ **CODE 9999 — LOOP DETECTADO**" if loop_detected else ""
-    lines.append(md_table(
-        ["Métrica", "Valor", "Nota"],
-        [
-            ["Estado", f"**{pheno_name} {pheno_symbol}**{loop_warning}", ""],
-            ["C_struct (Estructural)", f"**{c_structural:.4f}**", f"← real, limitada por α={ALPHA:.4f}"],
-            ["C_global (Normalizada)", f"{c_global_norm:.4f}", "← C_struct / α, relativa al máximo"],
-            ["C_CI (Pass Rate)", f"{c_ci:.4f}", "← proxy del CI, no es C_Ω"],
-            ["φ_eff (Fricción)", f"{phi_eff:.6f}", "← basada en C_struct"],
-            ["L7 (Integración)", f"{l7_info.get('value', 0.0):.6f}", f"← {l7_info.get('status', 'N/A')}"],
-            ["Umbral crítico (0.72)", "✅ SOBRE" if above_critical else "❌ BAJO", "← debajo = entropía acelerada"],
-            ["Umbral survival (0.10)", "✅ SOBRE" if above_survival else "❌ BAJO", "← debajo = cohesión mínima comprometida"],
-            ["Tendencia", trend, ""],
-        ],
-    ))
-    lines.append("")
-    lines.append("> **Nota semántica v2.1:** C_struct ≠ C_global ≠ C_CI.")
-    lines.append("> Solo C_struct es la coherencia estructural real del framework.")
-    lines.append("> C_struct nunca puede ser 1.0 — β = 1/27 es el residuo irreducible.")
-    lines.append("> **L7** es emergente: verifica que la integración real ocurrió. L6 orienta. L7 verifica.")
-    lines.append("")
-    if loop_detected:
-        lines.append("> ⚠️ **CODE 9999**: El sistema lleva 5+ runs consecutivos sin variación.")
-        lines.append("> β > 0 garantiza que ningún sistema real es estáticamente perfecto.")
-        lines.append("")
-
-    # Código Diagnóstico
-    lines.append("## Código Diagnóstico")
+    lines.append("# {0} OMEGA DIAGNOSTIC REPORT".format(ICON_OMEGA))
     lines.append("")
     lines.append(md_table(
         ["Campo", "Valor"],
         [
-            ["Código", f"**{code}**"],
-            ["Denominación", f"**{diag_name}**"],
-            ["C_structural", f"{c_structural:.4f}"],
-            ["Interpretación", vector_interp],
-            ["Descripción", diag_desc],
+            ["{0} Generated".format(ICON_INFO), _fmt(gen.get("utc"))],
+            ["{0} Omega".format(ICON_OMEGA), _fmt(gen.get("omega_version"))],
+            ["{0} Schema".format(ICON_MOD), _fmt(pkg.get("schema_version"))],
+            ["{0} SHA".format(ICON_SRC), _fmt(gen.get("sha"))],
+            ["{0} Ref".format(ICON_SRC), _fmt(gen.get("ref"))],
+            ["{0} Python".format(ICON_ITEM), _fmt(gen.get("python"))],
+            ["{0} Platform".format(ICON_ITEM), _fmt(gen.get("platform"))],
+            ["{0} Repository".format(ICON_REPO), _fmt(gen.get("repository"))],
+            ["{0} Authority".format(ICON_ENGINE), "Engine.paquete_omega" if (eng.get("paquete_from_engine")) else "omega-discovery"],
         ],
     ))
     lines.append("")
-    lines.append("### Tabla de Estados Completa (documento original enero 2026)")
-    lines.append("")
-    state_rows = []
-    for low, high, st_code, st_name, _ in DIAGNOSTIC_STATES:
-        marker = "**← AQUÍ**" if low <= c_structural < high else ""
-        state_rows.append([f"`{st_code}`", st_name, f"{low:.3f} – {high:.3f}", marker])
-    lines.append(md_table(["Código", "Estado", "Rango C_struct", ""], state_rows))
-    lines.append("")
-    lines.append("> **Nota prescriptiva:** El código no solo describe — comanda.")
-    lines.append("> Declarar 1144 es ordenar a los sistemas que se ajusten a esa frecuencia.")
-    lines.append("")
 
-    # System Status
-    lines.append("## System Status")
+    lines.append("## {0} Executive Status".format(ICON_HIST))
     lines.append("")
     lines.append(md_table(
-        ["Metric", "Value"],
+        ["Campo", "Valor"],
         [
-            ["C_structural (real)", f"**{c_structural:.4f}**  ← limitada por α"],
-            ["C_global_norm", f"{c_global_norm:.4f}  ← C_struct / α"],
-            ["L7 Integration", f"**{l7_info.get('value', 0.0):.6f}**  ← {l7_info.get('status', 'N/A')}"],
-            ["Layer source", states_source],
-            ["Coherence source", coherence_source],
-            ["L7 source", str(l7_info.get("source", "N/A"))],
-            ["Total Energy", f"{total_energy:.6f}"],
-            ["System Entropy", f"{entropy:.4f}"],
-            ["System Harmony", f"{harmony:.4f}"],
-            ["Damping Ratio (ZETA)", f"{zeta:.6f} (underdamped = alive)"],
-            ["Oscillation Period", f"{period:.4f}s"],
-            ["ω_eff (v3.2)", f"{OMEGA_EFF:.6f}"],
-            ["T_PERIOD (v3.2)", f"{T_PERIOD:.6f} s"],
+            ["{0} Cierre".format(ICON_OK if coherent else ICON_FAIL), "SYSTEM COHERENT" if coherent else "SYSTEM INCOHERENT"],
+            ["{0} Engine".format(ICON_ENGINE), _fmt(eng.get("estado") or ("disponible" if eng.get("available") else "N/D"))],
+            ["{0} Tests ejecutados".format(ICON_TEST), _fmt(tests.get("executed"))],
+            ["{0} Passed".format(ICON_OK), _fmt(tests.get("passed"))],
+            ["{0} Failed".format(ICON_FAIL), _fmt(tests.get("failed"))],
+            ["{0} Findings error".format(ICON_FIND), str(errors_n)],
+            ["{0} Findings warn".format(ICON_WARN), str(warns_n)],
         ],
     ))
     lines.append("")
 
-    # Test Results
-    lines.append("## Test Results")
+    lines.append("## {0} Audit Coverage".format(ICON_COV))
     lines.append("")
     lines.append(md_table(
-        ["Metric", "Value"],
+        ["Métrica", "Valor"],
+        [[k, _fmt(v)] for k, v in cov.items()],
+    ))
+    lines.append("")
+
+    lines.append("## {0} Repository Inventory".format(ICON_REPO))
+    lines.append("")
+    lines.append(md_table(
+        ["Métrica", "Valor"],
+        [[k, _fmt(v)] for k, v in summary.items()],
+    ))
+    lines.append("")
+    lines.append("<details><summary>{0} Archivos ({1})</summary>".format(ICON_ITEM, summary.get("files", 0)))
+    lines.append("")
+    file_rows = []
+    for f in (repo.get("files") or [])[:300]:
+        file_rows.append([
+            str(f.get("path", ""))[:60],
+            str(f.get("type", "")),
+            str(f.get("bytes", "")),
+            str(f.get("sha256") or "")[:12],
+        ])
+    if file_rows:
+        lines.append(md_table(["Path", "Tipo", "Bytes", "SHA256"], file_rows))
+    lines.append("")
+    lines.append("</details>")
+    lines.append("")
+
+    lines.append("## {0} Engine State".format(ICON_ENGINE))
+    lines.append("")
+    lines.append(md_table(
+        ["Campo", "Valor"],
         [
-            ["Total Tests", f"**{test_results['total']}**"],
-            ["Passed", str(test_results["passed"])],
-            ["Failed", str(test_results["failed"])],
-            ["Skipped", str(test_results["skipped"])],
-            ["Pass Rate", f"{pass_rate:.2f}%  (C_CI = {c_ci:.4f})"],
+            ["available", _fmt(eng.get("available"))],
+            ["class", _fmt(eng.get("class"))],
+            ["estado", _fmt(eng.get("estado"))],
+            ["invocador_id", _fmt(eng.get("invocador_id"))],
+            ["paquete_from_engine", _fmt(eng.get("paquete_from_engine"))],
+            ["error", _fmt(eng.get("error"))],
         ],
     ))
+    if eng.get("public_attrs"):
+        lines.append("")
+        lines.append("<details><summary>{0} Atributos públicos del Engine</summary>".format(ICON_ITEM))
+        lines.append("")
+        render_unknown("public_attrs", eng.get("public_attrs"), lines)
+        lines.append("")
+        lines.append("</details>")
     lines.append("")
 
-    # Trayectoria
-    lines.append("## Trayectoria de Coherencia")
+    lines.append("## {0} Python Module Census".format(ICON_MOD))
     lines.append("")
-    lines.append(f"Últimos {min(len(history), 10)} runs:")
+    mod_rows = []
+    for m in modules:
+        st = ICON_OK if m.get("importable") else ICON_FAIL
+        mod_rows.append([
+            st,
+            str(m.get("name", "")),
+            str(m.get("path", ""))[:40],
+            str(m.get("lines", "")),
+            str(len(m.get("symbols") or [])),
+            str(m.get("import_error_type") or ""),
+        ])
+    if mod_rows:
+        lines.append(md_table(["", "Módulo", "Path", "Líneas", "Símbolos", "Error"], mod_rows))
     lines.append("")
-    lines.append("```")
-    lines.append(traj if traj else "Sin historial")
-    lines.append("```")
+    lines.append("<details><summary>{0} Detalle por módulo</summary>".format(ICON_ITEM))
     lines.append("")
-
-    # Constants Integrity
-    lines.append("## Constants Integrity")
-    lines.append("")
-    lines.append(md_table(
-        ["Check", "Status"],
-        const_checks + [["**Total**", f"**{passed_checks}/{len(const_checks)}**"]],
-    ))
-    lines.append("")
-
-    # Framework Constants
-    lines.append("## Framework Constants")
-    lines.append("")
-    lines.append(md_table(
-        ["Constant", "Value", "Formula"],
-        [
-            ["ALPHA", f"{ALPHA:.6f}", "26/27  ← C_max estructural"],
-            ["BETA", f"{BETA:.6f}", "1/27   ← residuo irreducible"],
-            ["PHI", f"{PHI:.6f}", "(1+sqrt5)/2"],
-            ["S_REF", f"{S_REF:.6f}", "e/pi"],
-            ["S_REF_7", f"{S_REF_7:.6f}", "S_REF + BETA·ln(7)"],
-            ["R_FIN", f"{R_FIN:.6f}", "1+1/27"],
-            ["KAPPA", f"{KAPPA:.6f}", "pi/4"],
-            ["GOLDEN_ANG", f"{GOLDEN_ANG:.3f} deg", "360/phi^2"],
-            ["THETA_CUBE", f"{THETA_CUBE_DEG:.3f} deg", "asin(1/sqrt27)"],
-            ["OMEGA_EFF ★", f"{OMEGA_EFF:.6f}", "π·(1-√β)"],
-            ["T_PERIOD ★", f"{T_PERIOD:.6f} s", "2π/ω_d"],
-            ["LAMBDA_UCF ★", f"{LAMBDA_UCF:.4e}", "β^(π/β+β·φ²)"],
-            ["OMEGA_RED ★", f"{OMEGA_RED:.6f}", "(π/e)·(1-β²)"],
-        ],
-    ))
-    lines.append("")
-    lines.append("*★ = constantes nuevas v3.2*")
+    for m in modules:
+        lines.append("### `{0}`".format(m.get("name")))
+        lines.append("")
+        lines.append("- {0} path: `{1}`".format(ICON_SRC, m.get("path")))
+        lines.append("- {0} importable: `{1}`".format(ICON_OK if m.get("importable") else ICON_FAIL, m.get("importable")))
+        if m.get("import_error"):
+            lines.append("- {0} error: `{1}`".format(ICON_FIND, m.get("import_error")))
+        if m.get("symbols"):
+            rows = []
+            for s in m["symbols"][:80]:
+                rows.append([
+                    str(s.get("category")),
+                    str(s.get("name")),
+                    str(s.get("type")),
+                    _fmt(s.get("value"))[:40],
+                ])
+            lines.append(md_table(["Cat", "Nombre", "Tipo", "Valor"], rows))
+        lines.append("")
+    lines.append("</details>")
     lines.append("")
 
-    # Layer Status
-    lines.append("## Layer Status")
+    lines.append("## {0} Symbol / Variable Census".format(ICON_VAR))
     lines.append("")
-    lines.append(md_table(
-        ["Layer", "Name", "Friction", "Spiral Angle", "Healthy Range"],
-        layer_rows(states),
-    ))
+    lines.append(md_table(["Métrica", "Valor"], [[k, _fmt(v)] for k, v in stats.items()]))
     lines.append("")
-    lines.append("> **L7** no tiene fricción propia. Es el estado emergente del sistema")
-    lines.append("> cuando L0-L6 cooperan. Su valor es el producto multiplicativo de todas las capas.")
-    lines.append("> Si cualquier capa colapsa a cero, L7 = 0. No puede fingirse.")
-    lines.append("")
-
-    # Module Status
-    lines.append("## Module Status")
-    lines.append("")
-    lines.append(md_table(
-        ["Módulo", "Estado"],
-        [[label, status] for label, status in module_status],
-    ))
+    var_rows = []
+    for s in symbols[:200]:
+        if s.get("category") != "variable":
+            continue
+        icon = ICON_LOCK if s.get("redacted") else ICON_VAR
+        var_rows.append([icon, s.get("module", ""), s.get("name", ""), s.get("type", ""), _fmt(s.get("value"))[:40]])
+    if var_rows:
+        lines.append(md_table(["", "Módulo", "Nombre", "Tipo", "Valor"], var_rows[:120]))
     lines.append("")
 
-    # Domain Validations
-    lines.append("## Domain Validations")
+    lines.append("## {0} Framework Constants".format(ICON_FORM))
     lines.append("")
-
-    # Cosmological Constant
-    lines.append("### Cosmological Constant")
-    lines.append("")
-    lines.append(md_table(
-        ["Metric", "Value"],
-        [
-            ["Formula", str(lambda_info["formula"])],
-            ["Framework prediction", f"{lambda_info['prediction']:.4e}"],
-            ["Observed value", f"{lambda_info['observed']:.4e}"],
-            ["Error", f"{lambda_info['error_pct']:.2f}%"],
-            ["Log10 prediction", f"{lambda_info['log10_prediction']:.6f}"],
-            ["Log10 observed", f"{lambda_info['log10_observed']:.6f}"],
-            ["Log10 error", f"{lambda_info['log10_error']:.6f}"],
-            ["Base term 27π", f"{lambda_info['base_term_27pi']:.6f}"],
-            ["Correction βφ²", f"{lambda_info['correction_term_beta_phi2']:.6f}"],
-            ["Correction ratio", f"{lambda_info['correction_ratio']:.6f}"],
-            ["Numerically stable", "YES" if lambda_info["numerically_stable"] else "NO"],
-            ["Improvement over QM", str(lambda_info["improvement_qm"])],
-            ["Status", f"**{lambda_info['status']}**"],
-        ],
-    ))
-    lines.append("")
-
-    # Hubble Tension
-    lines.append("### Hubble Tension")
-    lines.append("")
-    lines.append(md_table(
-        ["Metric", "Value"],
-        [
-            ["Formula", str(hubble_info["formula"])],
-            ["Prediction", f"{hubble_info['prediction']:.6f}"],
-            ["Observed diff", f"{hubble_info['observed_diff']:.6f}"],
-            ["H early", f"{hubble_info['H_early']:.4f}"],
-            ["H late", f"{hubble_info['H_late']:.4f}"],
-            ["Abs error", f"{hubble_info['abs_error']:.6f}"],
-            ["Error", f"{hubble_info['error_pct']:.2f}%"],
-            ["Tolerance", f"{hubble_info['tolerance']:.6f}"],
-            ["Status", f"**{hubble_info['status']}**"],
-        ],
-    ))
-    lines.append("")
-
-    # Economic Cycles
-    lines.append("### Economic Cycles")
-    lines.append("")
-    lines.append(md_table(
-        ["Metric", "Value"],
-        [
-            ["Natural damping (zeta)", f"{econ_info['natural_zeta']:.6f}"],
-            ["Wu (2012) observed", f"{econ_info['observed_zeta']:.2f}"],
-            ["Damping error", f"{econ_info['damping_error_pct']:.1f}%"],
-            ["Kondratiev predicted", f"{econ_info['kond_pred']:.1f} years"],
-            ["Kondratiev observed", f"{econ_info['kond_obs']:.0f} years"],
-            ["Kondratiev error", f"{econ_info['kond_error_pct']:.1f}%"],
-            ["Status", f"**{econ_info['status']}**"],
-        ],
-    ))
-    lines.append("")
-
-
-    # Quantum Gravity & Particle Physics
-    lines.append("### Quantum Gravity & Particle Physics")
-    lines.append("")
-    if qg_info.get("available"):
+    if constants:
         lines.append(md_table(
-            ["Metric", "UCF Prediction", "Observed/Reference", "Error"],
-            [
-                ["Planck Energy (eV)", f"{qg_info['e_planck_ucf']:.4e}", f"{qg_info['e_planck_ref']:.4e}", f"{qg_info['e_planck_error']:.2f}%"],
-                ["Electron Mass (kg)", f"{qg_info['m_electron_ucf']:.4e}", f"{qg_info['m_electron_ref']:.4e}", f"{qg_info['m_electron_error']:.2f}%"],
-                ["Electron Radius (m)", f"{qg_info['r_electron_ucf']:.4e}", f"{qg_info['r_electron_ref']:.4e}", f"{qg_info['r_electron_error']:.2f}%"],
-                ["Strong Coupling α_s", f"{qg_info['alpha_s_ucf']:.4f}", f"{qg_info['alpha_s_ref']:.4f}", f"{qg_info['alpha_s_error']:.2f}%"],
-                ["Status", f"**{qg_info['status']}**", "", ""],
-            ],
+            ["Nombre", "Valor", "Tipo", "Clase", "Fuente"],
+            [[
+                c.get("name", ""),
+                _fmt(c.get("value")),
+                str(c.get("type", "")),
+                str(c.get("class", "")),
+                str(c.get("source", "")),
+            ] for c in constants],
         ))
     else:
-        lines.append("> ⚠️ Módulo quantum_gravity no disponible")
+        lines.append("{0} formulas.constants no disponible".format(ICON_WARN))
     lines.append("")
 
-    # Neuroscience & Brain Coherence
-    lines.append("### Neuroscience & Brain Coherence")
+    lines.append("## {0} Formula Inventory".format(ICON_FORM))
     lines.append("")
-    if neuro_info.get("available"):
-        lines.append(md_table(
-            ["Metric", "Value"],
-            [
-                ["EEG α/θ frequency ratio", f"{neuro_info['phi_ratio']:.4f} (PHI)"],
-                ["Observed ratio", f"{neuro_info['observed_ratio']:.3f}"],
-                ["Error", f"{neuro_info['error']:.1f}%"],
-                ["Status", f"**{neuro_info['status']}**"],
-            ],
-        ))
-    lines.append("")
-
-    # Genetic Code & Biology
-    lines.append("### Genetic Code & Biology")
-    lines.append("")
-    if genetic_info.get("available"):
-        lines.append(md_table(
-            ["Metric", "Value"],
-            [
-                ["Amino acids (27-7)", str(genetic_info['amino_acids'])],
-                ["Observed amino acids", str(genetic_info['observed_amino'])],
-                ["Body temperature (1000*BETA)", f"{genetic_info['body_temp']:.2f}°C"],
-                ["Observed body temp", f"{genetic_info['observed_temp']:.1f}°C"],
-                ["Temp error", f"{genetic_info['temp_error']:.2f}%"],
-                ["Status", f"**{genetic_info['status']}**"],
-            ],
-        ))
-    lines.append("")
-
-    # Black Hole Thermodynamics
-    lines.append("### Black Hole Thermodynamics")
-    lines.append("")
-    if bh_info.get("available"):
-        lines.append(md_table(
-            ["Metric", "Value"],
-            [
-                ["Hawking temp coefficient", f"{bh_info['hawking_ref']:.4f} (1/8π)"],
-                ["Framework BETA", f"{bh_info['beta_value']:.4f} (1/27)"],
-                ["Error", f"{bh_info['error']:.1f}%"],
-                ["Status", f"**{bh_info['status']}**"],
-            ],
-        ))
-    lines.append("")
-    # Torus Formula
-    lines.append("### Torus Formula")
-    lines.append("")
-    if torus_info.get("available"):
-        e_m_value = torus_info.get("E_M_computed", "N/A")
-        if isinstance(e_m_value, float):
-            e_m_render = f"{e_m_value:.4e}"
-        else:
-            e_m_render = str(e_m_value)
-
-        lines.append(md_table(
-            ["Metric", "Value"],
-            [
-                ["Primes (T4)", str(torus_info["primes"])],
-                ["M (primorial)", str(torus_info["M"])],
-                ["phi(M)", str(torus_info["phi_M"])],
-                ["Ley 1 — Independencia de Ciclos", "✅ PASS" if torus_info["law1_holds"] else "❌ FAIL"],
-                ["Ley 2 — Resonancia de Ciclos", "✅ PASS" if torus_info["law2_holds"] else "❌ FAIL"],
-                ["Ley 3 — Filtrado Primo", "✅ PASS" if torus_info["law3_holds"] else "❌ FAIL"],
-                ["Ley 4 — Campo Aritmético E(M)", "✅ PASS" if torus_info["law4_holds"] else "❌ FAIL"],
-                ["E(M) calculado", e_m_render],
-                ["E(M6) paper", f"{E_M6_PAPER:.2e}"],
-                ["E(M7) paper", f"{E_M7_PAPER:.2e}"],
-                ["Beta^n más cercano", f"n={torus_info['beta_closest_n']}, valor={torus_info['beta_closest_v']:.4e}"],
-                ["Conexión UCF", torus_info["ucf_link"]],
-                ["Conexión RH", torus_info["rh_status"]],
-                ["Status", f"**{torus_info['status']}**"],
-            ],
-        ))
+    fn_rows = []
+    for m in modules:
+        if not str(m.get("name", "")).startswith("formulas"):
+            continue
+        for fn in m.get("static_functions") or []:
+            if not fn.get("public"):
+                continue
+            fn_rows.append([
+                str(m.get("name")),
+                str(fn.get("name")),
+                ", ".join(fn.get("args") or []),
+                str(fn.get("line")),
+            ])
+    if fn_rows:
+        lines.append(md_table(["Módulo", "Función", "Args", "Línea"], fn_rows))
     else:
-        lines.append(f"> ⚠️ Módulo torus_formula no disponible: {torus_info.get('status', 'N/A')}")
+        lines.append("{0} sin funciones públicas descubiertas en formulas.*".format(ICON_INFO))
     lines.append("")
 
-    # L7 Integration
-    lines.append("### L7 Integration")
+    lines.append("## {0} Layer State".format(ICON_LAYER))
     lines.append("")
-    if l7_info.get("available"):
+    if layers:
         lines.append(md_table(
-            ["Metric", "Value"],
-            [
-                ["Fórmula", l7_info["formula"]],
-                ["L7 value", f"**{l7_info['value']:.6f}**"],
-                ["Status", f"**{l7_info['status']}**"],
-                ["Max posible", f"{l7_info['max_possible']:.6f}  ← alpha"],
-                ["Ley", l7_info["law"]],
-                ["Principio", l7_info["note"]],
-                ["Source", str(l7_info.get("source", "N/A"))],
-            ],
+            ["Id", "Módulo", "Contrato", "Medido", "Error"],
+            [[
+                str(L.get("id", "")),
+                str(L.get("module", "")),
+                str(L.get("contract") or "N/D"),
+                _fmt(L.get("measured")),
+                str(L.get("import_error") or ""),
+            ] for L in layers],
         ))
+        lines.append("")
+        lines.append("<details><summary>{0} Detalle de capas</summary>".format(ICON_ITEM))
+        lines.append("")
+        for L in layers:
+            render_unknown(str(L.get("id")), L, lines)
+        lines.append("")
+        lines.append("</details>")
     else:
-        lines.append(f"> ⚠️ L7 no disponible: {l7_info.get('status', 'N/A')}")
+        lines.append("{0} ninguna capa con contrato descubierta".format(ICON_WARN))
     lines.append("")
 
-    # Energy Distribution
-    lines.append("## Energy Distribution")
+    lines.append("## {0} Tests".format(ICON_TEST))
     lines.append("")
     lines.append(md_table(
-        ["Layer", "Energy"],
+        ["Campo", "Valor"],
         [
-            ["L0", f"{energies['L0']:.6f}"],
-            ["L1", f"{energies['L1']:.6f}"],
-            ["L2", f"{energies['L2']:.6f}"],
-            ["L3", f"{energies['L3']:.6f}"],
-            ["L4", f"{energies['L4']:.6f}"],
-            ["L5", f"{energies['L5']:.6f}"],
-            ["L6", f"{energies['L6']:.6f}"],
-            ["Total", f"**{total_energy:.6f}**"],
+            ["source", _fmt(tests.get("source"))],
+            ["executed", _fmt(tests.get("executed"))],
+            ["discovered files", _fmt((tests.get("discovered") or {}).get("n_files"))],
+            ["total", _fmt(tests.get("total"))],
+            ["passed", _fmt(tests.get("passed"))],
+            ["failures", _fmt(tests.get("failures"))],
+            ["errors", _fmt(tests.get("errors"))],
+            ["failed", _fmt(tests.get("failed"))],
+            ["skipped", _fmt(tests.get("skipped"))],
+            ["rate", _fmt(tests.get("rate"))],
         ],
     ))
+    cases = tests.get("cases") or []
+    bad = [c for c in cases if c.get("status") in {"failure", "error"}]
+    if bad:
+        lines.append("")
+        lines.append("### {0} Fallos individuales".format(ICON_FAIL))
+        lines.append("")
+        lines.append(md_table(
+            ["Status", "Clase", "Nombre", "Detalle"],
+            [[c.get("status"), str(c.get("classname") or "")[-40:], str(c.get("name") or ""), str(c.get("detail") or "")[:60]] for c in bad[:40]],
+        ))
     lines.append("")
 
-    # Cube Geometry
-    lines.append("## Cube Geometry")
+    lines.append("## {0} Coherence History".format(ICON_HIST))
     lines.append("")
-    lines.append("3x3x3 = 27 positions  ")
-    lines.append(f"Exterior: 26 (ALPHA = {ALPHA:.6f})  ← C_max estructural")
-    lines.append(f"Center:   1  (BETA  = {BETA:.6f})  ← residuo irreducible")
-    lines.append(f"ALPHA + BETA = {ALPHA + BETA:.1f}  ← conservación estructural")
+    if history:
+        rows = []
+        for h in history[-20:]:
+            rows.append([
+                str(h.get("utc") or h.get("timestamp") or "")[:19],
+                str(h.get("sha") or ""),
+                _fmt(h.get("total")),
+                _fmt(h.get("passed")),
+                _fmt(h.get("failed")),
+                _fmt(h.get("skipped")),
+                _fmt(h.get("rate") or h.get("pass_rate")),
+                str(h.get("estado") or ""),
+            ])
+        lines.append(md_table(["utc", "sha", "total", "passed", "failed", "skipped", "rate", "estado"], rows))
+    else:
+        lines.append("{0} historial no disponible (Omega no lo escribe)".format(ICON_INFO))
     lines.append("")
+
+    lines.append("## {0} Domain Validations".format(ICON_DOM))
+    lines.append("")
+    if validations:
+        lines.append(md_table(
+            ["", "Id", "Título", "Status", "Fuente"],
+            [[
+                _icon_status(v.get("status")),
+                str(v.get("id", "")),
+                str(v.get("title", "")),
+                str(v.get("status", "")),
+                str(v.get("source", "")),
+            ] for v in validations],
+        ))
+        lines.append("")
+        for v in validations:
+            lines.append("### {0} {1}".format(_icon_status(v.get("status")), v.get("title") or v.get("id")))
+            lines.append("")
+            metrics = v.get("metrics")
+            if isinstance(metrics, dict) and metrics:
+                lines.append(md_table(["Métrica", "Valor"], [[str(k), _fmt(val)] for k, val in metrics.items()]))
+                lines.append("")
+            rest = {k: val for k, val in v.items() if k not in {"id", "title", "status", "source", "metrics"}}
+            if rest:
+                lines.append("<details><summary>{0} evidencia</summary>".format(ICON_ITEM))
+                lines.append("")
+                render_unknown("evidence", rest, lines)
+                lines.append("")
+                lines.append("</details>")
+                lines.append("")
+    else:
+        lines.append("{0} ningún productor `omega_validation()` / `__omega_report__()` descubierto".format(ICON_INFO))
+        lines.append("")
+
+    lines.append("## {0} Dependency Graph".format(ICON_GRAPH))
+    lines.append("")
+    edges = deps.get("edges") or []
+    lines.append("- nodos: `{0}`".format(len(deps.get("nodes") or [])))
+    lines.append("- aristas: `{0}`".format(len(edges)))
+    lines.append("")
+    if edges:
+        lines.append("<details><summary>{0} Aristas</summary>".format(ICON_ITEM))
+        lines.append("")
+        lines.append(md_table(
+            ["Origen", "Dependencia", "Tipo"],
+            [[e.get("from", ""), e.get("to", ""), e.get("kind", "")] for e in edges[:80]],
+        ))
+        lines.append("")
+        lines.append("</details>")
+    lines.append("")
+
+    lines.append("## {0} Diagnostic Artifacts".format(ICON_SRC))
+    lines.append("")
+    items = artifacts.get("items") or []
+    if items:
+        lines.append(md_table(
+            ["", "Artefacto", "Bytes"],
+            [[ICON_OK if i.get("present") else ICON_FAIL, i.get("name", ""), _fmt(i.get("bytes"))] for i in items],
+        ))
+    lines.append("")
+
+    lines.append("## {0} Findings".format(ICON_FIND))
+    lines.append("")
+    if findings:
+        lines.append(md_table(
+            ["Sev", "Categoría", "Componente", "Mensaje"],
+            [[
+                str(f.get("severity", "")),
+                str(f.get("category", "")),
+                str(f.get("component", "")),
+                str(f.get("message", ""))[:80],
+            ] for f in findings[:80]],
+        ))
+    else:
+        lines.append("{0} sin hallazgos registrados".format(ICON_OK))
+    lines.append("")
+
+    known = {
+        "schema_version", "generated", "engine", "repository", "modules",
+        "symbols", "variables", "constants", "layers", "tests",
+        "coherence_history", "validations", "dependencies", "artifacts",
+        "coverage", "findings", "authority", "omega_discovery",
+    }
+    extra = [k for k in pkg.keys() if k not in known]
+    lines.append("## {0} Evidence / campos adicionales".format(ICON_ITEM))
+    lines.append("")
+    if extra:
+        for k in extra:
+            render_unknown(k, pkg[k], lines)
+    else:
+        lines.append("{0} sin campos extra respecto al contrato base".format(ICON_INFO))
+    lines.append("")
+
     lines.append("---")
     lines.append("")
-    lines.append("*The system is coherent. All layers integrated. Omega.*")
+    if coherent:
+        lines.append("{0} **SYSTEM COHERENT** — sin errores de descubrimiento bloqueantes.".format(ICON_OK))
+    else:
+        lines.append("{0} **SYSTEM INCOHERENT**".format(ICON_FAIL))
+        for f in findings:
+            if str(f.get("severity", "")).upper() == "ERROR":
+                lines.append("- {0} [{1}] {2}: {3}".format(ICON_FAIL, f.get("category"), f.get("component"), f.get("message")))
     lines.append("")
     lines.append("**Omega**")
     lines.append("")
-
     return "\n".join(lines)
 
 
-# =============================================================================
-# SAVE
-# =============================================================================
-
-
-def save_json_data(
-    c_structural: float,
-    c_global_norm: float,
-    c_ci: float,
-    l7_value: float,
-    phi_eff: float,
-    code: str,
-    diag_name: str,
-    pheno_name: str,
-    test_results: dict,
-) -> Path:
-    DIAGNOSTICS_DIR.mkdir(parents=True, exist_ok=True)
-    output_path = DIAGNOSTICS_DIR / "omega_report_data.json"
-    
-    data = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "C_struct": c_structural,
-        "C_global_norm": c_global_norm,
-        "C_CI": c_ci,
-        "L7": l7_value,
-        "phi_eff": phi_eff,
-        "codigo": code,
-        "estado": diag_name,
-        "pheno": pheno_name,
-        "pass_rate": test_results.get("pass_rate", 0.0),
-        "total": test_results.get("total", 0),
-        "passed": test_results.get("passed", 0),
-        "failed": test_results.get("failed", 0),
-        "skipped": test_results.get("skipped", 0)
-    }
-    
-    output_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
-    return output_path
-
-def save_report(report: str) -> Path:
-    DIAGNOSTICS_DIR.mkdir(parents=True, exist_ok=True)
-    output_path = DIAGNOSTICS_DIR / "OMEGA_REPORT.md"
-    output_path.write_text(report, encoding="utf-8")
-    return output_path
+def render_ci(pkg: dict[str, Any]) -> str:
+    gen = pkg.get("generated") or {}
+    eng = pkg.get("engine") or {}
+    cov = pkg.get("coverage") or {}
+    tests = pkg.get("tests") or {}
+    findings = pkg.get("findings") or []
+    errors_n = sum(1 for f in findings if str(f.get("severity", "")).upper() == "ERROR")
+    warns_n = sum(1 for f in findings if str(f.get("severity", "")).upper() == "WARNING")
+    lines = [
+        W,
+        "{0} OMEGA — AUDITORÍA EXTREMA".format(ICON_OMEGA),
+        W,
+        "{0} SHA                   {1}".format(ICON_SRC, gen.get("sha")),
+        "{0} Authority             {1}".format(ICON_ENGINE, "Engine" if eng.get("paquete_from_engine") else "discovery"),
+        "{0} Engine                {1}".format(ICON_ENGINE, eng.get("estado") or ("sí" if eng.get("available") else "N/D")),
+        S,
+        "{0} Py files              {1}".format(ICON_REPO, cov.get("python_files_discovered")),
+        "{0} Import OK             {1}".format(ICON_OK, cov.get("modules_importable")),
+        "{0} Import FAIL           {1}".format(ICON_FAIL, cov.get("modules_failed_import")),
+        "{0} Símbolos              {1}".format(ICON_VAR, cov.get("public_symbols_discovered")),
+        "{0} Layers                {1}".format(ICON_LAYER, cov.get("layers_discovered")),
+        "{0} Validaciones          {1}".format(ICON_DOM, cov.get("validations_discovered")),
+        S,
+        "{0} Tests src             {1}".format(ICON_TEST, tests.get("source")),
+        "{0} Passed                {1}".format(ICON_OK, tests.get("passed")),
+        "{0} Failed                {1}".format(ICON_FAIL, tests.get("failed")),
+        "{0} Findings              {1} err / {2} warn".format(ICON_FIND, errors_n, warns_n),
+        S,
+        "{0} JSON                  diagnostics/omega_report_data.json".format(ICON_SRC),
+        "{0} Markdown              diagnostics/OMEGA_REPORT.md".format(ICON_MOD),
+        W,
+    ]
+    return "\n".join(str(x) for x in lines)
 
 
 # =============================================================================
-# MAIN
+# SAVE / MAIN
 # =============================================================================
 
+def _json_ready(obj: Any) -> Any:
+    if obj is None or isinstance(obj, (bool, int, float, str)):
+        return obj
+    if isinstance(obj, Path):
+        return str(obj)
+    if isinstance(obj, dict):
+        return {str(k): _json_ready(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple, set)):
+        return [_json_ready(x) for x in obj]
+    return _safe(obj)
 
-def main() -> None:
+
+def main() -> int:
     print("Running Omega Report...")
-    report = build_report()
-    print(report)
-    output_path = save_report(report)
-    print(f"\nReport saved to: {output_path}")
-    
-    # We need to extract the values from the report string or pass them from build_report
-    # For simplicity, we'll parse our own markdown just like the diary publisher does,
-    # but we'll do it right here to create the JSON file.
-    
-    def extract(label: str) -> float:
-        pattern = re.compile(r"\|\s*" + re.escape(label) + r"\s*\|\s*\*?\*?([\d\.]+)\*?\*?\s*\|")
-        match = pattern.search(report)
-        return float(match.group(1)) if match else 0.0
-        
-    c_struct = extract("C_struct (Estructural)")
-    c_global = extract("C_global (Normalizada)")
-    c_ci = extract("C_CI (Pass Rate)")
-    l7 = extract("L7 (Integración)")
-    phi_eff = extract("φ_eff (Fricción)")
-    
-    code_match = re.search(r"\|\s*Código\s*\|\s*\*?\*?(\d{4})\*?\*?\s*\|", report)
-    code = code_match.group(1) if code_match else "0000"
-    
-    name_match = re.search(r"\|\s*Denominación\s*\|\s*\*?\*?([^|*\n]+?)\*?\*?\s*\|", report)
-    diag_name = name_match.group(1).strip() if name_match else "Unknown"
-    
-    # Estado row is in the Fenomenológico section: | Estado | **CONFLICTO ⟨◯⟩**  ⚠️ ... |
-    pheno_match = re.search(r"\|\s*Estado\s*\|\s*\*?\*?([^|\n]+?)\s*\|", report)
-    if pheno_match:
-        pheno_raw = pheno_match.group(1).strip()
-        # Strip bold markers and CODE 9999 warning
-        pheno_raw = pheno_raw.split('⚠')[0].strip()
-        pheno_name = pheno_raw.strip('*').strip()
-    else:
-        pheno_name = "Unknown"
-    
-    total = int(extract("Total Tests"))
-    passed = int(extract("Passed"))
-    failed = int(extract("Failed"))
-    skipped = int(extract("Skipped"))
-    # Pass Rate is in format "99.93%  (C_CI = 0.9993)" — extract the number before %
-    pass_rate_match = re.search(r"\|\s*Pass Rate\s*\|\s*([\d\.]+)%", report)
-    pass_rate = float(pass_rate_match.group(1)) if pass_rate_match else 0.0
-    
-    test_results = {
-        "total": total,
-        "passed": passed,
-        "failed": failed,
-        "skipped": skipped,
-        "pass_rate": pass_rate
-    }
-    
-    json_path = save_json_data(c_struct, c_global, c_ci, l7, phi_eff, code, diag_name, pheno_name, test_results)
-    print(f"JSON data saved to: {json_path}")
+    paquete = build_paquete()
+    markdown = render_markdown(paquete)
+    compact = render_ci(paquete)
+
+    DIAGNOSTICS_DIR.mkdir(parents=True, exist_ok=True)
+    md_path = DIAGNOSTICS_DIR / "OMEGA_REPORT.md"
+    js_path = DIAGNOSTICS_DIR / "omega_report_data.json"
+    md_path.write_text(markdown, encoding="utf-8")
+    js_path.write_text(json.dumps(_json_ready(paquete), indent=2, ensure_ascii=False, default=str), encoding="utf-8")
+
+    print(compact)
+    print("\nReport saved to: {0}".format(md_path))
+    print("JSON data saved to: {0}".format(js_path))
+    errors_n = sum(1 for f in (paquete.get("findings") or []) if str(f.get("severity", "")).upper() == "ERROR")
+    return 0 if errors_n == 0 else 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

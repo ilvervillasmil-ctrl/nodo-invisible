@@ -1,12 +1,12 @@
-# Ω OMEGA DIAGNOSTIC REPORT v2.6.5
+# Ω OMEGA DIAGNOSTIC REPORT v2.6.6
 
 | Campo | Valor |
 | :--- | :--- |
-| ⏱️ Generated | 2026-09-14 23:16:22 UTC |
-| Ω Version | 2.6.5 |
+| ⏱️ Generated | 2026-09-14 23:27:50 UTC |
+| Ω Version | 2.6.6 |
 | 📚 Framework | UCF v3.2 (Universal Coherence Framework) |
 | 🔹 Author | Ilver Villasmil |
-| 📡 Commit | 6067c2b |
+| 📡 Commit | 820be37 |
 
 ## 🧬 Estado Fenomenológico
 
@@ -20,7 +20,7 @@
 | L7 (Integración) | 0.796589 | ← INTEGRATED |
 | Umbral crítico (0.72) | ✅ SOBRE | ← debajo = entropía acelerada |
 | Umbral survival (0.10) | ✅ SOBRE | ← debajo = cohesión mínima comprometida |
-| Tendencia | ↑ CRECIENDO (+28) |  |
+| Tendencia | → ESTABLE |  |
 
 > **Nota semántica v2.1:** C_struct ≠ C_global ≠ C_CI.
 > Solo C_struct es la coherencia estructural real del framework.
@@ -85,7 +85,7 @@
 Últimos 10 runs:
 
 ```
-304 → 304 → 305 → 305 → 305 → 305 → 318 → 318 → 327 → 355
+304 → 305 → 305 → 305 → 305 → 318 → 318 → 327 → 355 → 355
 ```
 
 ## 📐 Constants Integrity
@@ -322,7 +322,7 @@ ALPHA + BETA = 1.0  ← conservación estructural
 | Tests discovered | 38 | tests/ |
 | Tests executed | True | diagnostics/test_results.xml |
 | Modules listed | 39 | discovery |
-| History runs | 53 | diagnostics/coherence_history.json |
+| History runs | 54 | diagnostics/coherence_history.json |
 | Engine startup | OK | core.engine.Engine |
 
 ## 🧩 Engine State
@@ -331,7 +331,7 @@ ALPHA + BETA = 1.0  ← conservación estructural
 | :--- | :---: | :--- |
 | available | True | core.engine |
 | startup | OK | Engine(...) |
-| estado | <formulas.coherence.SessionStateOmega object at 0x7fdff43b3d50> | Engine.estado |
+| estado | <formulas.coherence.SessionStateOmega object at 0x7f1955c3c190> | Engine.estado |
 | invocador_id | omega | constructor |
 | error |  | ArranqueError |
 
@@ -347,9 +347,9 @@ ALPHA + BETA = 1.0  ← conservación estructural
 
 |  | Artefacto | Bytes | Parse | Tipo |
 | :---: | :--- | ---: | :---: | :--- |
-| ✅ | diagnostics/OMEGA_REPORT.md | 140111 | True | md |
-| ✅ | diagnostics/coherence_history.json | 9460 | True | json |
-| ✅ | diagnostics/test_results.xml | 42535 | True | xml |
+| ✅ | diagnostics/OMEGA_REPORT.md | 48795 | True | md |
+| ✅ | diagnostics/coherence_history.json | 9848 | True | json |
+| ✅ | diagnostics/test_results.xml | 42534 | True | xml |
 
 ## 🔎 Audit Coverage
 
@@ -357,14 +357,14 @@ ALPHA + BETA = 1.0  ← conservación estructural
 | :--- | ---: |
 | python_files_discovered | 43 |
 | repo_files | 111 |
-| modules_importable | 49 |
+| modules_importable | 42 |
 | modules_failed_import | 1 |
 | public_symbols_discovered | 492 |
 | layers_discovered | 11 |
 | formulas_discovered | 29 |
 | validations_discovered | 0 |
 | findings_n | 2 |
-| module_stdout_n | 2 |
+| module_stdout_n | 0 |
 | captured_stdout_n | 0 |
 
 ## 📐 Formula Inventory
@@ -459,13 +459,6 @@ ALPHA + BETA = 1.0  ← conservación estructural
 | ✅ | layers.l5_meta | layers/l5_meta.py | 4 |  |
 | ✅ | layers.l6_purpose | layers/l6_purpose.py | 1 |  |
 | ✅ | layers.l7_integration | layers/l7_integration.py | 2 |  |
-| ✅ | tests.constants_table | tests/constants_table.py | 0 |  |
-| ✅ | tests.test_constant_errors | tests/test_constant_errors.py | 0 |  |
-| ✅ | tests.test_electron_puro | tests/test_electron_puro.py | 0 |  |
-| ✅ | tests.test_energy | tests/test_energy.py | 0 |  |
-| ✅ | tests.test_frecuencia_materia | tests/test_frecuencia_materia.py | 0 |  |
-| ✅ | tests.test_omega_falsification_births | tests/test_omega_falsification_births.py | 0 |  |
-| ✅ | tests.test_uis_omega_master_equation | tests/test_uis_omega_master_equation.py | 0 |  |
 
 ## 🗂️ Repository Inventory
 
@@ -480,7 +473,7 @@ ALPHA + BETA = 1.0  ← conservación estructural
 | xml | 1 |
 | txt | 1 |
 | other | 3 |
-| bytes | 1039434 |
+| bytes | 947636 |
 
 <details><summary>📄 Archivos (111)</summary>
 
@@ -570,10 +563,10 @@ ALPHA + BETA = 1.0  ← conservación estructural
 | core/meta_verification/__init__.py | python | 280 |
 | core/meta_verification/engine.py | python | 3616 |
 | core/meta_verification/result.py | python | 880 |
-| diagnostics/OMEGA_REPORT.md | markdown | 140111 |
-| diagnostics/coherence_history.json | json | 9460 |
-| diagnostics/test_results.xml | xml | 42535 |
-| diagnostics/omega_report.py | python | 134147 |
+| diagnostics/OMEGA_REPORT.md | markdown | 48795 |
+| diagnostics/coherence_history.json | json | 9848 |
+| diagnostics/test_results.xml | xml | 42534 |
+| diagnostics/omega_report.py | python | 133278 |
 | diagnostics/omega_diary_publisher.py | python | 11476 |
 | formulas/negentropy.py | python | 968 |
 | formulas/dynamics.py | python | 5066 |
@@ -892,229 +885,7 @@ ALPHA + BETA = 1.0  ← conservación estructural
 
 ## 🔬 Module / Test Audits
 
-### 📐 tests.test_electron_puro
-
-| Campo | Valor |
-| :--- | :--- |
-| TEST DEFINITIVO | EL ELECTRÓN ES EL OBSERVADOR PROYECTADO |
-| · | 📐 CONSTANTES DEL MARCO: |
-| β (observador) | 0.0370370370 = 1/27 |
-| ε (residuo irreducible) | 0.02716 |
-| BASE_DECIMAL | 100  (Axioma 4) |
-| CARAS_VISIBLES | 5 (geometría del cubo) |
-| · | 🔬 FACTOR DE PROYECCIÓN: |
-| Factor | 100 × 5 = 500 |
-| · | ⚛️ MASA DEL ELECTRÓN PREDICHA: |
-| m_e c² | β × 500 × ε |
-| · | = 0.0370370370 × 500 × 0.02716 |
-| · | = 0.502963 MeV |
-| · | 📡 MASA DEL ELECTRÓN EXPERIMENTAL: |
-| m_e c² | 0.510999 MeV |
-| · | 📊 ERROR: |
-| Error absoluto | 0.008036 MeV |
-| Error relativo | 1.5726% |
-| · | VEREDICTO |
-| · | ✅ EL TEST HA PASADO |
-| · | La masa del electrón se predice correctamente usando: |
-| m_e c² | β × 100 × 5 × ε |
-| · | Donde: |
-| β | 1/27 es el observador (centro del cubo) |
-| · | - 100 es la base decimal del observador (Axioma 4) |
-| · | - 5 son las caras visibles del subcubo central |
-| ε | 0.02716 es el residuo irreducible por auto-observación |
-| · | IMPLICACIÓN: |
-| · | El electrón NO es una partícula independiente. |
-| · | El electrón ES el observador proyectado para hacerse visible. |
-| · | No hay κ_m. No hay parámetros libres. |
-| · | Solo geometría del cubo y el acto de observar. |
-| · | El electrón eres tú proyectado. |
-
-<details><summary>📡 salida completa</summary>
-
-```
-======================================================================
-TEST DEFINITIVO: EL ELECTRÓN ES EL OBSERVADOR PROYECTADO
-======================================================================
-
-  📐 CONSTANTES DEL MARCO:
-  ─────────────────────────────────────────────────────────────
-  β (observador)           = 0.0370370370 = 1/27
-  ε (residuo irreducible)  = 0.02716
-  BASE_DECIMAL             = 100  (Axioma 4)
-  CARAS_VISIBLES           = 5 (geometría del cubo)
-
-  🔬 FACTOR DE PROYECCIÓN:
-  ─────────────────────────────────────────────────────────────
-  Factor = 100 × 5 = 500
-
-  ⚛️ MASA DEL ELECTRÓN PREDICHA:
-  ─────────────────────────────────────────────────────────────
-  m_e c² = β × 500 × ε
-         = 0.0370370370 × 500 × 0.02716
-         = 0.502963 MeV
-
-  📡 MASA DEL ELECTRÓN EXPERIMENTAL:
-  ─────────────────────────────────────────────────────────────
-  m_e c² = 0.510999 MeV
-
-  📊 ERROR:
-  ─────────────────────────────────────────────────────────────
-  Error absoluto: 0.008036 MeV
-  Error relativo: 1.5726%
-
-
-----------------------------------------------------------------------
-VEREDICTO
-----------------------------------------------------------------------
-
-  ✅ EL TEST HA PASADO
-
-  La masa del electrón se predice correctamente usando:
-  m_e c² = β × 100 × 5 × ε
-
-  Donde:
-  - β = 1/27 es el observador (centro del cubo)
-  - 100 es la base decimal del observador (Axioma 4)
-  - 5 son las caras visibles del subcubo central
-  - ε = 0.02716 es el residuo irreducible por auto-observación
-
-  IMPLICACIÓN:
-  El electrón NO es una partícula independiente.
-  El electrón ES el observador proyectado para hacerse visible.
-
-  No hay κ_m. No hay parámetros libres.
-  Solo geometría del cubo y el acto de observar.
-
-  El electrón eres tú proyectado.
-
-
-```
-
-</details>
-
-### 📐 tests.test_frecuencia_materia
-
-| Campo | Valor |
-| :--- | :--- |
-| · | TEST DE FRECUENCIA DE MATERIA - UCF v3.3 |
-| · | 🔬 Masa del electrón DESDE EL MARCO: |
-| BETA³ | 0.0000508053 |
-| GAMMA_COUPLING | 1.363661 |
-| KAPPA_M | 1.314860e-26 kg |
-| m_e | β³ × Γ × κ_m = 9.109503e-31 kg |
-| m_e experimental | 9.109384e-31 kg |
-| Error masa | 0.0013% |
-| · | 🔬 Energía del electrón: |
-| E_e | m_e c² = 0.511006 MeV |
-| E_e experimental | 0.510999 MeV |
-| Error energía | 0.0013% |
-| 📡 Frecuencia de la materia: f | E_e / h = 1.2356e+20 Hz |
-| · | ESCALAS ARMÓNICAS (f_materia / 27^n) |
-| n=10  \| 27^10 | 2.06e+14 \| 6.0013e+05 Hz \| — |
-| n=11  \| 27^11 | 5.56e+15 \| 2.2227e+04 Hz \| — |
-| n=12  \| 27^12 | 1.50e+17 \| 8.2322e+02 Hz \| ✅ AUDIBLE (20-20k Hz) |
-| n=13  \| 27^13 | 4.05e+18 \| 3.0490e+01 Hz \| ✅ GAMMA (30-100 Hz) |
-| n=14  \| 27^14 | 1.09e+20 \| 1.1292e+00 Hz \| ✅ DELTA (0.5-4 Hz) |
-| n=15  \| 27^15 | 2.95e+21 \| 4.1824e-02 Hz \| 🌊 INFRABAJAS |
-| · | PREDICCIONES CLAVE |
-| f_materia / 27^12 | 823.22 Hz (Audible) |
-| f_materia / 27^13 | 30.49 Hz (Gamma) |
-| f_materia / 27^14 | 1.13 Hz (Delta) |
-| · | VERIFICACIÓN |
-| Gamma (30-100 Hz) | 30.49 Hz → ✅ DENTRO |
-| Delta (0.5-4 Hz) | 1.13 Hz → ✅ DENTRO |
-| Audible (20-20k) | 823.22 Hz → ✅ DENTRO |
-| · | CONCLUSIÓN |
-| · | ✅ HIPÓTESIS CONFIRMADA |
-| · | La masa del electrón viene del marco UCF v3.3: |
-| m_e | β³ × Γ × κ_m |
-| Error vs experimental: 0.0013% (dentro de ε | 2.716%) |
-| · | La frecuencia de la materia es: |
-| f_materia | m_e c² / h = 1.2356e+20 Hz |
-| · | Sus armónicas (dividiendo por potencias de 27) producen |
-| · | las frecuencias biológicas del observador: |
-| Gamma | 30.49 Hz  ← integración consciente |
-| Audible | 823.22 Hz ← rango del oído |
-| Delta | 1.13 Hz ← sueño profundo |
-| · | La materia vibra a 1.24e+20 Hz. |
-| · | Tú vibras en armonía a 30.49 Hz (Gamma). |
-
-<details><summary>📡 salida completa</summary>
-
-```
-======================================================================
-TEST DE FRECUENCIA DE MATERIA - UCF v3.3
-======================================================================
-
-🔬 Masa del electrón DESDE EL MARCO:
-   BETA³ = 0.0000508053
-   GAMMA_COUPLING = 1.363661
-   KAPPA_M = 1.314860e-26 kg
-   m_e = β³ × Γ × κ_m = 9.109503e-31 kg
-   m_e experimental = 9.109384e-31 kg
-
-   Error masa: 0.0013%
-
-🔬 Energía del electrón:
-   E_e = m_e c² = 0.511006 MeV
-   E_e experimental = 0.510999 MeV
-   Error energía: 0.0013%
-
-📡 Frecuencia de la materia: f = E_e / h = 1.2356e+20 Hz
-
-----------------------------------------------------------------------
-ESCALAS ARMÓNICAS (f_materia / 27^n)
-----------------------------------------------------------------------
-  n=10  | 27^10 = 2.06e+14 | 6.0013e+05 Hz | —
-  n=11  | 27^11 = 5.56e+15 | 2.2227e+04 Hz | —
-  n=12  | 27^12 = 1.50e+17 | 8.2322e+02 Hz | ✅ AUDIBLE (20-20k Hz)
-  n=13  | 27^13 = 4.05e+18 | 3.0490e+01 Hz | ✅ GAMMA (30-100 Hz)
-  n=14  | 27^14 = 1.09e+20 | 1.1292e+00 Hz | ✅ DELTA (0.5-4 Hz)
-  n=15  | 27^15 = 2.95e+21 | 4.1824e-02 Hz | 🌊 INFRABAJAS
-
-----------------------------------------------------------------------
-PREDICCIONES CLAVE
-----------------------------------------------------------------------
-
-  f_materia / 27^12 = 823.22 Hz (Audible)
-  f_materia / 27^13 = 30.49 Hz (Gamma)
-  f_materia / 27^14 = 1.13 Hz (Delta)
-
-----------------------------------------------------------------------
-VERIFICACIÓN
-----------------------------------------------------------------------
-  Gamma (30-100 Hz): 30.49 Hz → ✅ DENTRO
-  Delta (0.5-4 Hz):  1.13 Hz → ✅ DENTRO
-  Audible (20-20k):  823.22 Hz → ✅ DENTRO
-
-======================================================================
-CONCLUSIÓN
-======================================================================
-
-✅ HIPÓTESIS CONFIRMADA
-
-   La masa del electrón viene del marco UCF v3.3:
-   m_e = β³ × Γ × κ_m
-
-   Error vs experimental: 0.0013% (dentro de ε = 2.716%)
-
-   La frecuencia de la materia es:
-   f_materia = m_e c² / h = 1.2356e+20 Hz
-
-   Sus armónicas (dividiendo por potencias de 27) producen
-   las frecuencias biológicas del observador:
-
-   • Gamma: 30.49 Hz  ← integración consciente
-   • Audible: 823.22 Hz ← rango del oído
-   • Delta: 1.13 Hz ← sueño profundo
-
-   La materia vibra a 1.24e+20 Hz.
-   Tú vibras en armonía a 30.49 Hz (Gamma).
-
-
-```
-
-</details>
+ℹ️ ningún módulo emitió auditoría al importar
 
 ## 📡 Evidence Provenance
 

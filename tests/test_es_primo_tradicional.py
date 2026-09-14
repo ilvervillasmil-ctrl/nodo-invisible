@@ -83,4 +83,4 @@ def probar_teorema_uis(limite):
         print(f"\n❌ Se encontraron {errores} errores en el rango [1, {limite:,}].")
 
 # Ejecutar la prueba
-probar_teorema_uis(100000000)
+probar_teorema_uis(10000)

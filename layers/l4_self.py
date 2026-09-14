@@ -13,7 +13,8 @@ Principio de diseño:
     phi = 1 - L  (fricción = brecha entre módulos disponibles y completos)
 """
 
-import importlib.util
+import json
+from pathlib import Path
 from typing import Optional
 
 _CRITICAL_MODULES = [

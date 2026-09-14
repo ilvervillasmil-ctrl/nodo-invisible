@@ -43,7 +43,7 @@ def _check_module_completeness() -> float:
     return loaded / len(_CRITICAL_MODULES)
 
 
-class Layerself:
+class selfLayer:
     """
     L4 — self.
 
